@@ -1,0 +1,43 @@
+ALEX RIVERA
+Full Stack & Backend Python Engineer
+San Francisco, CA | (555) 234-5678 | alex.rivera@example.com
+LinkedIn: linkedin.com/in/alex-rivera-dev | GitHub: github.com/alexrivera-code
+
+PROFESSIONAL SUMMARY
+Results-driven Software Engineer with 4+ years of experience specializing in Python, FastAPI, Django, and cloud native architectures. Proven track record in designing resilient microservices, optimizing database performance by 35%, and implementing automated CI/CD pipelines. Passionate about clean code, unit testing, and building data-driven applications.
+
+TECHNICAL SKILLS
+- Programming Languages: Python, JavaScript, TypeScript, SQL, Bash
+- Frameworks & Libraries: FastAPI, Django, Flask, React, Streamlit, REST API
+- Databases: PostgreSQL, MySQL, Redis, SQLite
+- Cloud & DevOps: Docker, AWS, GitHub Actions, CI/CD, Linux, Git
+- AI & Data Science: Machine Learning, Scikit-Learn, Pandas, NumPy, NLP
+- Engineering Practices: Agile, Scrum, Unit Testing, Microservices, System Design, Code Review
+
+WORK EXPERIENCE
+
+Senior Backend Developer | Finova Labs | San Francisco, CA
+March 2022 – Present
+- Architected and deployed scalable RESTful APIs using Python and FastAPI, serving 2.5 million daily requests with 99.98% uptime.
+- Optimized high-frequency PostgreSQL queries and introduced Redis caching layers, cutting average response time from 380ms to 95ms (75% latency reduction).
+- Containerized legacy backend services with Docker and spearheaded automated CI/CD pipelines via GitHub Actions, decreasing release cycle times by 40%.
+- Mentored 4 junior software engineers on clean architecture patterns, code quality standards, and comprehensive pytest test coverage (achieving >85% coverage).
+
+Software Engineer | Nexa Solutions | San Jose, CA
+July 2021 – February 2022
+- Developed core business logic modules using Django and PostgreSQL for a fintech client platform.
+- Integrated third-party payment gateways and webhook ingestion systems with robust error handling and retry mechanisms.
+- Participated in bi-weekly Agile sprints, daily standups, and peer code reviews.
+
+EDUCATION
+Bachelor of Science in Computer Science
+Western State University | Graduated May 2021 | GPA: 3.8/4.0
+Relevant Coursework: Data Structures & Algorithms, Database Systems, Distributed Computing, Artificial Intelligence
+
+PROJECTS
+- ResumeIQ Platform: Developed an intelligent resume parsing and job matching web platform utilizing Python, Streamlit, Scikit-Learn TF-IDF, and PyMuPDF with automated skill gap extraction.
+- Cloud Metrics Pipeline: Built a scalable metrics aggregation engine using Docker, FastAPI, and Redis with real-time alerting.
+
+CERTIFICATIONS
+- AWS Certified Solutions Architect – Associate (2023)
+- HashiCorp Certified: Terraform Associate (2024)

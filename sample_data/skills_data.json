@@ -1,0 +1,42 @@
+{
+  "Programming Languages": [
+    "Python", "JavaScript", "TypeScript", "Java", "C++", "C#", "C", "Go", "Golang",
+    "Rust", "Ruby", "PHP", "Swift", "Kotlin", "Scala", "R", "SQL", "HTML", "HTML5",
+    "CSS", "CSS3", "Bash", "Shell", "PowerShell", "Dart", "Perl"
+  ],
+  "Web Frameworks & Libraries": [
+    "Django", "Flask", "FastAPI", "React", "React.js", "Angular", "Vue", "Vue.js",
+    "Node.js", "Express", "Express.js", "Next.js", "Nuxt.js", "Svelte", "Spring Boot",
+    "ASP.NET", "ASP.NET Core", "Ruby on Rails", "Laravel", "Tailwind CSS", "Bootstrap",
+    "jQuery", "Streamlit", "Redux", "GraphQL", "REST API", "RESTful API", "FastAPI", "gRPC"
+  ],
+  "Databases & Data Storage": [
+    "PostgreSQL", "MySQL", "SQLite", "MongoDB", "Redis", "Elasticsearch", "Cassandra",
+    "Oracle", "Microsoft SQL Server", "DynamoDB", "MariaDB", "Neo4j", "Firebase",
+    "Supabase", "Snowflake", "BigQuery"
+  ],
+  "Cloud & DevOps": [
+    "AWS", "Amazon Web Services", "Azure", "Google Cloud", "GCP", "Docker", "Kubernetes",
+    "CI/CD", "Continuous Integration", "Continuous Deployment", "Jenkins", "GitHub Actions",
+    "GitLab CI", "Terraform", "Ansible", "Linux", "Git", "GitHub", "GitLab", "Bitbucket",
+    "Nginx", "Apache", "Prometheus", "Grafana", "Helm", "CloudFormation"
+  ],
+  "AI & Data Science": [
+    "Machine Learning", "Deep Learning", "Artificial Intelligence", "NLP",
+    "Natural Language Processing", "Computer Vision", "Data Analysis", "Data Science",
+    "Pandas", "NumPy", "Scikit-Learn", "TensorFlow", "Keras", "PyTorch", "OpenCV",
+    "Matplotlib", "Seaborn", "NLTK", "Spacy", "Hugging Face", "LLM", "Prompt Engineering",
+    "Feature Engineering", "Data Modeling", "ETL", "Tableau", "Power BI"
+  ],
+  "Engineering Methodologies & Practices": [
+    "Agile", "Scrum", "Kanban", "Test Driven Development", "TDD", "Unit Testing",
+    "System Design", "Microservices", "Object-Oriented Programming", "OOP",
+    "Clean Architecture", "Code Review", "Design Patterns", "Debugging", "Refactoring",
+    "API Design", "Performance Optimization"
+  ],
+  "Soft Skills & Leadership": [
+    "Problem Solving", "Communication", "Team Collaboration", "Leadership", "Mentorship",
+    "Critical Thinking", "Time Management", "Adaptability", "Project Management",
+    "Stakeholder Management", "Cross-Functional Collaboration", "Analytical Thinking"
+  ]
+}

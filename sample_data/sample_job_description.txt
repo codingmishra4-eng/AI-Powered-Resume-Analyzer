@@ -1,0 +1,31 @@
+Role: Senior Python Backend Engineer
+Company: CloudScale Dynamics Inc.
+Location: Remote (US-Based)
+Employment Type: Full-time
+
+ABOUT THE ROLE
+We are seeking an experienced and collaborative Senior Python Backend Engineer to join our Core Infrastructure & Platform team. In this role, you will be responsible for designing, building, and maintaining high-throughput microservices, architecting robust data pipelines, and driving technical excellence across our distributed systems.
+
+KEY RESPONSIBILITIES
+- Architect and develop high-performance RESTful APIs and microservices using Python and FastAPI.
+- Optimize database schemas and queries using PostgreSQL and implement distributed caching with Redis.
+- Collaborate with DevOps engineers to containerize services using Docker and orchestrate deployments with Kubernetes.
+- Drive automated testing practices (unit testing, integration testing) and CI/CD pipelines to ensure 99.99% system reliability.
+- Participate in architectural reviews, system design sessions, and sprint planning in an Agile environment.
+- Mentor junior and mid-level software engineers on clean code, design patterns, and debugging.
+
+REQUIRED QUALIFICATIONS & SKILLS
+- 4+ years of professional software engineering experience with Python.
+- Proven hands-on experience building backend APIs with modern frameworks (FastAPI or Django).
+- Deep understanding of relational databases, specifically PostgreSQL, query optimization, and indexing.
+- Practical experience with in-memory data stores like Redis for caching and session management.
+- Solid experience with containerization using Docker and cloud platforms (AWS or GCP).
+- Experience with Git, GitHub Actions, and CI/CD automation.
+- Strong grounding in Unit Testing, Clean Architecture, and System Design.
+- Excellent communication, problem solving, and cross-functional collaboration abilities.
+
+NICE-TO-HAVE SKILLS
+- Hands-on experience with Kubernetes cluster management and Helm.
+- Experience with event-driven architectures and message brokers such as Kafka or RabbitMQ.
+- Knowledge of GraphQL and gRPC for service-to-service communication.
+- Infrastructure as Code experience with Terraform.
