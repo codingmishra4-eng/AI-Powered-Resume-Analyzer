@@ -2,9 +2,10 @@
 ResumeIQ Configuration Module
 -----------------------------
 Centralized configuration settings for ResumeIQ application:
-paths, file constraints, matching weights, and UI theme constants.
+file constraints, scoring models, synonym dictionaries, theme constants, and AI provider settings.
 """
 
+import os
 from pathlib import Path
 
 # Base Paths
@@ -18,21 +19,94 @@ CSS_PATH = ASSETS_DIR / "styles.css"
 
 # Application Metadata
 APP_NAME = "ResumeIQ"
-APP_TAGLINE = "AI-Powered Resume Analyzer & Job Match Platform"
-APP_VERSION = "1.0.0"
+APP_TAGLINE = "AI-Powered ATS Resume Analyzer & Job Match Platform"
+APP_VERSION = "2.0.0"
 
 # File Upload Constraints
 MAX_FILE_SIZE_MB = 5
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
-# Scoring Weights
-# The overall compatibility score combines:
-# 1. TF-IDF Cosine Similarity (Textual/Semantic match across description and resume)
-# 2. Skill Overlap Ratio (Direct match of extracted technical and soft skills)
+# -----------------------------------------------------------------------------
+# Distinct Scoring Weights Architecture
+# These three scores serve fundamentally different purposes and are never interchangeable:
+# 1. Resume Quality Score: How well the resume is written, structured, and quantified.
+# 2. ATS Compatibility Score: How reliably an Applicant Tracking System can parse the file.
+# 3. Job Match Score: How closely candidate skills and experience match the target job post.
+# -----------------------------------------------------------------------------
+RESUME_QUALITY_WEIGHTS = {
+    "content_completeness": 0.15,
+    "work_experience_achievements": 0.25,
+    "skills_and_evidence": 0.20,
+    "summary_and_clarity": 0.15,
+    "grammar_and_readability": 0.10,
+    "structure_and_formatting": 0.15
+}
+
+ATS_COMPATIBILITY_WEIGHTS = {
+    "text_extraction_reliability": 0.25,
+    "standard_section_headings": 0.25,
+    "contact_info_completeness": 0.20,
+    "layout_formatting_risk": 0.20,
+    "file_format_and_length": 0.10
+}
+
+JOB_MATCH_WEIGHTS = {
+    "required_skills": 0.45,
+    "preferred_skills": 0.15,
+    "semantic_tfidf": 0.20,
+    "experience_alignment": 0.20
+}
+
+# Legacy scoring weights backwards compatibility
 SCORING_WEIGHTS = {
     "tfidf_weight": 0.40,
     "skill_weight": 0.60
+}
+
+# Configurable Synonym & Abbreviation Mapping for Semantic Keyword Matching
+SYNONYM_DICTIONARY = {
+    "js": "javascript",
+    "javascript": "javascript",
+    "ts": "typescript",
+    "typescript": "typescript",
+    "py": "python",
+    "python": "python",
+    "k8s": "kubernetes",
+    "kubernetes": "kubernetes",
+    "postgres": "postgresql",
+    "postgresql": "postgresql",
+    "mongo": "mongodb",
+    "mongodb": "mongodb",
+    "aws": "amazon web services",
+    "amazon web services": "aws",
+    "gcp": "google cloud",
+    "google cloud": "gcp",
+    "azure": "microsoft azure",
+    "microsoft azure": "azure",
+    "ml": "machine learning",
+    "machine learning": "ml",
+    "ai": "artificial intelligence",
+    "artificial intelligence": "ai",
+    "nlp": "natural language processing",
+    "natural language processing": "nlp",
+    "ci/cd": "continuous integration",
+    "continuous integration": "ci/cd",
+    "tdd": "test driven development",
+    "oop": "object oriented programming",
+    "react.js": "react",
+    "vue.js": "vue",
+    "node": "node.js",
+    "node.js": "node.js"
+}
+
+# AI Assistant Settings (Server-side Configurable)
+AI_CONFIG = {
+    "default_provider": os.getenv("AI_PROVIDER", "local"),  # "local", "gemini", or "openai"
+    "gemini_api_key": os.getenv("GEMINI_API_KEY", ""),
+    "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
+    "gemini_model": os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+    "openai_model": os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 }
 
 # UI Theme Palette (Cohesive Slate & Indigo/Electric Blue Dark Theme)

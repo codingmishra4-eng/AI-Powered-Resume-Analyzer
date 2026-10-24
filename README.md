@@ -1,56 +1,72 @@
-# ResumeIQ — AI-Powered Resume Analyzer & Job Match Platform
+# ResumeIQ Enterprise — AI-Powered ATS Resume Analyzer & Job Match Platform
 
 ![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Tests](https://img.shields.io/badge/pytest-36%20passed-brightgreen.svg)
+![Tests](https://img.shields.io/badge/pytest-55%20passed-brightgreen.svg)
 ![Frontend](https://img.shields.io/badge/frontend-Streamlit%20Dark%20SaaS-indigo.svg)
 ![Storage](https://img.shields.io/badge/database-SQLite%20Local-slate.svg)
+![Release](https://img.shields.io/badge/version-2.0.0%20Enterprise-violet.svg)
 
-**ResumeIQ** is an explainable, professional-grade resume analysis and job matching platform built with Python, Natural Language Processing (NLP), and Streamlit.
+**ResumeIQ Enterprise** is a production-oriented, explainable AI-powered resume analysis, ATS optimization, and job-matching platform built with **Python 3.10+**, **Natural Language Processing (NLP)**, and **Streamlit**.
 
-Designed with clean code, beginner-friendly architecture, and a modern SaaS dark theme, ResumeIQ analyzes candidate resumes against job descriptions, pinpoints technical skill gaps, evaluates semantic keyword alignment, and provides practical, rule-based improvement suggestions.
+Designed with clean code, modular architecture, and a modern SaaS dark theme (Slate 900 / Indigo accents), ResumeIQ empowers job seekers and engineers to assess their resume health across **three distinct, non-interchangeable scoring dimensions**, optimize content with Google XYZ impact formulas, and export verified ATS-friendly documents in vector PDF and Word (.docx) formats.
 
 ---
 
-## 🌟 Key Features
+## 🎯 Three Distinct, Explainable Scoring Models
 
-### 1. Multi-Format Resume Parsing
+ResumeIQ strictly distinguishes between three fundamental evaluation metrics:
+
+| Metric | What It Measures | Default Configurable Weights |
+| :--- | :--- | :--- |
+| **Resume Quality Score (0–100%)** | How well the resume is written, substantiated with numbers, and organized. | Content Completeness (15%), Work Experience & Achievements (25%), Skills & Evidence (20%), Summary Clarity (15%), Grammar & Readability (10%), Structure & Formatting (15%). |
+| **ATS Parsing Compatibility (0–100%)** | How reliably commercial Applicant Tracking Systems (e.g. Workday, Taleo, Greenhouse) can extract text, map headings, and parse contact data. | Text Extraction Reliability (25%), Standard Headings (25%), Contact Completeness (20%), Layout & Formatting Risks (20%), File Format & Length (10%). |
+| **Job Description Match Score (0–100%)** | How closely candidate skills, experience, and vocabulary align with a specific job posting. *(Shows clear prompt when no JD is supplied).* | Required Technical Skills (45%), Preferred Skills (15%), Semantic TF-IDF Vocabulary (20%), Role & Title Alignment (20%). |
+
+---
+
+## 🌟 Comprehensive Feature Set
+
+### 1. Multi-Format Extraction & Structured Profile
 - **PDF Extraction:** Extracts text glyphs using high-performance PyMuPDF (`fitz`).
 - **DOCX Extraction:** Parses Microsoft Word paragraphs and tables via `python-docx`.
-- **Plain Text Support:** Decodes `.txt` files with UTF-8 / Latin-1 fallbacks.
-- **Scanned PDF Detection:** Automatically identifies image-only PDFs lacking embedded text layers and alerts the user to run OCR instead of silently failing.
-- **Section Parsing:** Detects standard resume headings (*Summary, Experience, Skills, Education, Projects, Certifications*).
-- **Contact Extraction:** Identifies email, phone, LinkedIn, GitHub, and personal portfolio links.
+- **Scanned PDF Detection:** Identifies image-only PDFs lacking embedded text layers and alerts the user to run OCR instead of returning a deceptive score.
+- **Editable Structured Preview:** Automatically extracts candidate name, location, email, phone, LinkedIn, GitHub, summary, and work roles, allowing users to correct extraction mistakes before finalizing analysis.
 
-### 2. Explainable Job Matching & Scoring
-- **TF-IDF Vectorization:** Normalizes text, filters stopwords, and computes unigram + bigram TF-IDF representations.
-- **Cosine Similarity:** Measures the angular distance and vocabulary alignment between resume and job description.
-- **Categorized Skill Taxonomy:** Scans text using a configurable catalog of hundreds of skills across Programming Languages, Frameworks, Cloud/DevOps, Databases, and AI.
-- **Hybrid Compatibility Formula:**
-  $$\text{Overall Score} = (0.40 \times \text{TF-IDF Cosine Score}) + (0.60 \times \text{Skill Overlap Ratio})$$
-- **Ethical Transparency:** Explains the score as a mathematical alignment index rather than a deceptive "AI hiring certainty."
+### 2. Dedicated ATS Compatibility Diagnostics
+- **Heading Standardization Check:** Verifies standard section headings against industry norms.
+- **Format Risk Scanner:** Identifies complex multi-column table artifacts, non-standard graphic glyphs (`■`, `✦`, `★`), and font encoding corruptions.
+- **Header Contact Completeness:** Flags missing recruiter links (LinkedIn, GitHub) or missing email/phone.
 
-### 3. Interactive Skill Gap Matrix
-- **Matched Skills (Green Pills):** Required skills found on the candidate's resume.
-- **Missing Skills (Red Pills):** Skills requested in the job description but absent from the resume.
-- **Additional Skills (Indigo Pills):** Extra candidate competencies beyond the job post.
-- **Priority Learning Recommendations:** Recommends which missing technical skills to acquire or highlight first.
-- **Plotly Visualizations:** Interactive gauge meters, donut charts, and domain distribution bar charts.
+### 3. Job Description Matching & Keyword Intelligence
+- **Requirement Partitioning:** Distinguishes between **Required Qualifications** and **Preferred / Nice-to-Have** competencies.
+- **Synonym Expansion:** Recognizes equivalent acronyms and terms (`JS` ↔ `JavaScript`, `K8s` ↔ `Kubernetes`, `AWS` ↔ `Amazon Web Services`, `Postgres` ↔ `PostgreSQL`).
+- **Evidence Mapping:** Pinpoints exact sentence snippets in the resume where matched keywords appear.
+- **Keyword Stuffing Detection:** Alerts candidates if keywords appear unnaturally often without accompanying action verbs.
 
-### 4. Rule-Based Resume Recommendations
-- **Measurable Impact:** Flags bullets lacking metrics and suggests framing achievements with quantifiable numbers (percentages, latency, throughput).
-- **Action Verbs:** Replaces passive phrases (*"responsible for"*, *"helped with"*) with strong action verbs (*"architected"*, *"optimized"*).
-- **Structure Completeness:** Identifies missing standard sections to improve ATS readability.
-- **Contact Completeness:** Warns when recruiter reach-out links (LinkedIn, GitHub) are absent.
+### 4. Work Experience & Achievement Audit
+- **Quantified Metrics Ratio:** Calculates the percentage of bullet points with measurable impact (numbers, percentages, dollar figures, latency, throughput).
+- **Action Verb Audit:** Identifies bullets opening with strong action verbs (*"Architected"*, *"Spearheaded"*, *"Optimized"*) vs passive phrases (*"responsible for"*, *"worked on"*).
+- **Weak Bullet Transformer:** Suggests stronger alternatives with Google-standard XYZ framing (*Accomplished [X] by doing [Z] as measured by [Y]*).
 
-### 5. Local SQLite Analysis History
-- Saves analysis metadata, scores, timestamps, and matched/missing skills locally.
-- 100% parameterized SQL queries to prevent SQL injection.
-- Zero storage of raw resume text to protect candidate privacy.
-- Interactive history view with individual record deletion and clear-all capabilities.
+### 5. AI Resume Assistant & Optimizer
+- **Provider Abstraction:** Configurable server-side integration supporting **Google Gemini API** (`GEMINI_API_KEY`) or **OpenAI API** (`OPENAI_API_KEY`), with a **high-quality deterministic local rule-based engine as the default offline zero-key fallback**.
+- **Capabilities:**
+  - Professional summary generator tailored to candidate experience and target role.
+  - Bullet point enhancer with impact metric placeholders.
+  - Contextual score explainer and interactive Q&A assistant.
+- **Factuality & Safety:** Prompt injection guards; never fabricates unverified employers, dates, or degrees.
 
-### 6. One-Click Demo Mode
-- Instant loading of a realistic sample candidate resume and Senior Python Engineer job description for immediate testing.
+### 6. ATS-Friendly Resume Builder & Multi-Format Export
+- **Vector PDF Generator:** Creates clean single-column PDF resumes via PyMuPDF with clickable hyperlinks.
+- **Word DOCX Generator:** Generates formatted Microsoft Word (.docx) documents with standard heading styles.
+- **Comprehensive Evaluation Report:** Downloadable detailed Markdown audit report.
+- **Extractability Self-Test:** Re-parses the generated document in-memory to verify that 100% of the text layer is extractable and readable by an ATS.
+
+### 7. Version History & Snapshot Comparison
+- **SQLite Database Persistence:** Parameterized SQL queries preventing injection.
+- **Version Tracking:** Save named snapshots (e.g., *v1.0 Baseline*, *v2.0 Targeted for CloudScale*).
+- **Side-by-Side Comparison:** Compare Version A vs Version B to track score progression, newly added skills, and removed terms.
 
 ---
 
@@ -58,150 +74,95 @@ Designed with clean code, beginner-friendly architecture, and a modern SaaS dark
 
 ```
 AI Resume Analyzer/
-├── app.py                      # Main Streamlit web application & user interface
-├── config.py                   # Central application configuration & theme constants
-├── requirements.txt            # Python dependencies
+├── app.py                      # Main Streamlit web application & modern SaaS UI
+├── config.py                   # Central configuration, scoring weights, and synonym dictionary
+├── requirements.txt            # Project dependencies
 ├── README.md                   # Project documentation & setup instructions
-├── BEGINNER_GUIDE.md           # In-depth educational guide & viva interview prep
+├── BEGINNER_GUIDE.md           # 15-section pedagogical guide, algorithm deep-dive, viva Q&A
 ├── .gitignore                  # Git ignore rules for venv, database, and cache
 ├── analyzer/                   # Core NLP & analysis package
-│   ├── __init__.py
-│   ├── resume_parser.py        # PDF, DOCX, TXT parsers & section/contact extractors
+│   ├── __init__.py             # Public package exports
+│   ├── resume_parser.py        # PDF, DOCX, TXT parsers & structured entity extractors
 │   ├── text_preprocessing.py   # Stopwords, cleaning, tokenization
 │   ├── skill_extractor.py      # Skill taxonomy & gap analysis engine
 │   ├── similarity.py           # TF-IDF vectorization & cosine similarity
-│   └── recommendations.py      # Rule-based resume improvement engine
+│   ├── recommendations.py      # Rule-based resume improvement engine
+│   ├── ats_analyzer.py         # Dedicated ATS Compatibility Analyzer
+│   ├── quality_analyzer.py     # Dedicated Resume Quality Analyzer & bullet audit
+│   ├── job_matcher.py          # Job Description Matcher, synonyms, evidence mapper
+│   ├── ai_assistant.py         # AI Assistant, bullet enhancer, score Q&A
+│   └── resume_builder.py       # Vector PDF & DOCX generator, self-test re-parser
 ├── database/                   # SQLite persistence package
 │   ├── __init__.py
-│   └── db.py                   # SQLite schema, CRUD operations, parameterized queries
+│   └── db.py                   # Schema, migrations, CRUD, version snapshots, comparison
 ├── utils/                      # Helper package
 │   ├── __init__.py
 │   └── validators.py           # File size/extension checks, JD validation, OCR detector
 ├── assets/                     # UI styling
-│   └── styles.css              # Custom SaaS dark theme stylesheet
+│   └── styles.css              # Custom SaaS dark theme stylesheet (Slate 900 / Indigo)
 ├── sample_data/                # Synthetic test assets
 │   ├── sample_resume.txt       # Plaintext sample resume
 │   ├── sample_resume.pdf       # Formatted PDF sample resume
 │   ├── sample_resume.docx      # Formatted Word sample resume
 │   ├── sample_job_description.txt # Target job description
 │   └── skills_data.json        # Categorized JSON skills taxonomy
-└── tests/                      # Automated test suite (36 passing tests)
+└── tests/                      # Automated test suite (55 passing tests)
     ├── test_validators.py      # Validation & sanitization tests
     ├── test_parser.py          # Document & section extraction tests
     ├── test_skill_extractor.py # Skill pattern & boundary tests
     ├── test_similarity.py      # TF-IDF & cosine similarity tests
     ├── test_recommendations.py # Suggestion rules tests
-    ├── test_db.py              # SQLite CRUD & aggregation tests
+    ├── test_ats_analyzer.py    # ATS compatibility & layout risk tests
+    ├── test_quality_analyzer.py# Quality score, metrics, and action verb tests
+    ├── test_job_matcher.py     # JD requirement partition, synonyms, evidence tests
+    ├── test_builder_and_assistant.py # PDF/DOCX builder, extractability, AI tests
+    ├── test_db.py              # SQLite CRUD, version snapshots, comparison tests
     └── test_integration.py     # End-to-end PDF & DOCX pipeline tests
 ```
 
 ---
 
-## 🛠 Technology Stack
-
-| Component | Technology | Rationale |
-| :--- | :--- | :--- |
-| **Language** | Python 3.10 / 3.11 | Modern typing, pattern matching, and high performance. |
-| **User Interface** | Streamlit + Custom CSS | Clean, reactive UI rendered with a modern SaaS slate/charcoal dark theme. |
-| **PDF Extraction** | PyMuPDF (`pymupdf`/`fitz`) | High-speed C-based engine supporting font CMaps, encrypted checks, and fast text extraction. |
-| **DOCX Support** | `python-docx` | Native Microsoft Word paragraph and table extraction. |
-| **NLP & Vectors** | `scikit-learn` & `re` | Production-standard `TfidfVectorizer` and `cosine_similarity`. |
-| **Visualizations** | `plotly` | High-definition, responsive charts (gauges, donuts, bar charts). |
-| **Data Storage** | SQLite (`sqlite3`) | Embedded, zero-configuration local database using parameterized queries. |
-| **Testing** | `pytest` | Comprehensive unit and integration test suite (36 tests). |
-
----
-
 ## 🚀 Setup & Execution Instructions (Windows / PowerShell)
 
-Follow these step-by-step instructions in **Visual Studio Code** or the **Windows PowerShell terminal**.
-
-### 1. Verify Your Python Installation
-Open PowerShell and verify Python 3.10 or 3.11 is installed:
-```powershell
-python --version
-```
-*(If Python is not recognized, install it from [python.org](https://www.python.org/) and ensure "Add Python to PATH" is checked during installation).*
-
-### 2. Navigate to the Project Folder
+### 1. Open Terminal and Navigate to the Project
 ```powershell
 cd "c:\Users\kavya\Desktop\AI Resume Analyzer"
 ```
 
-### 3. Create a Virtual Environment
-Isolate the project packages from your global Python environment:
-```powershell
-python -m venv .venv
-```
-
-### 4. Activate the Virtual Environment
+### 2. Activate the Virtual Environment
 ```powershell
 .venv\Scripts\Activate.ps1
 ```
-> **Troubleshooting Note:** If PowerShell shows a script execution error (`PSSecurityException`), run this command in your PowerShell window to permit local scripts:
-> ```powershell
-> Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-> .venv\Scripts\Activate.ps1
-> ```
+*(If PowerShell script execution is restricted on your system, execute: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` before activating).*
 
-### 5. Install Dependencies
-```powershell
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-### 6. Run the Automated Test Suite
-Verify that all 36 tests pass on your machine:
+### 3. Run the Automated Test Suite (55 Tests)
 ```powershell
 python -m pytest -v
 ```
 
-### 7. Launch the Application
-Run the Streamlit web dashboard:
+### 4. Launch the Web Application
 ```powershell
 streamlit run app.py
 ```
-Streamlit will automatically open your default web browser to:
+Open your web browser at:
 ```
 http://localhost:8501
-```
-
-### 8. Deactivate the Virtual Environment
-When you are finished using the app, you can shut down the local server by pressing `Ctrl + C` in PowerShell, then run:
-```powershell
-deactivate
 ```
 
 ---
 
 ## 🔒 Security & Privacy Guarantees
 
-1. **100% Local Processing:** ResumeIQ requires **zero external API keys** and makes no cloud network calls during analysis. Resumes never leave your computer.
-2. **Safe Database Storage:** SQLite stores only numerical scores, timestamps, and extracted skill arrays. **Full resume text is never written to the database.**
-3. **Parameterized SQL:** All database interactions in `database/db.py` use `?` placeholders, eliminating SQL injection risks.
-4. **Input Size & Type Limits:** File uploads are restricted to `.pdf`, `.docx`, and `.txt` up to a maximum of 5MB.
+1. **100% Local Default:** Zero external API keys required. Resumes never leave your computer unless you explicitly configure an external AI provider.
+2. **Safe SQLite Storage:** Stores only numerical scores, timestamps, and extracted skill arrays. **Full resume text is never written to database tables.**
+3. **Parameterized SQL:** All database operations in `database/db.py` use `?` placeholders, eliminating SQL injection risks.
+4. **Input Size & Type Limits:** File uploads are restricted to `.pdf`, `.docx`, and `.txt` up to 5MB.
 5. **No File Execution:** Documents are read strictly as data streams via PyMuPDF/python-docx; uploaded files are never executed.
-6. **Full Data Control:** Users can inspect or permanently delete individual analysis records or wipe the entire history at any time.
-
----
-
-## ⚠️ Known Limitations
-
-- **Image-Only Resumes:** Resumes created as scanned images/photos without an embedded text layer require OCR (Optical Character Recognition). ResumeIQ detects these documents and alerts the user, but does not bundle heavy OCR binaries like Tesseract in this initial version.
-- **Complex Multi-Column Layouts:** Unconventional artistic multi-column resumes may sometimes interleave adjacent text blocks. Using standard single- or two-column chronological formats is recommended for both ResumeIQ and real-world ATS software.
-- **Single-User Local Version:** This release is architected as a local desktop/workstation tool, not a multi-tenant cloud service with user accounts.
-
----
-
-## 🗺 Future Improvement Roadmap
-
-- [ ] **Local OCR Integration:** Optional Tesseract OCR sidecar to extract text from scanned image PDFs.
-- [ ] **PDF Export of Analysis:** One-click download of a formatted PDF report summarizing match score, skill gaps, and recommendations.
-- [ ] **Local Transformer Embeddings:** Optional toggle for offline sentence-transformers (`all-MiniLM-L6-v2`) for deeper contextual understanding alongside TF-IDF.
-- [ ] **Multi-Resume Batch Comparison:** Ability to upload 10+ resumes simultaneously and rank candidates against a single job description.
+6. **Full Data Control:** Users can inspect, compare, or permanently delete individual records or wipe the entire history at any time.
 
 ---
 
 ## 📚 Educational Companion Guide
 
-For a line-by-line code explanation, step-by-step mathematical examples of TF-IDF and Cosine Similarity, and 15+ university viva/interview questions, read [`BEGINNER_GUIDE.md`](./BEGINNER_GUIDE.md).
+For a line-by-line explanation of every algorithm, step-by-step mathematical examples of TF-IDF and Cosine Similarity, and 15+ university viva and interview questions with answers, open:
+👉 [**BEGINNER_GUIDE.md**](./BEGINNER_GUIDE.md)

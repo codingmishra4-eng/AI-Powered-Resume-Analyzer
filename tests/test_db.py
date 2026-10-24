@@ -119,3 +119,52 @@ def test_summary_stats(temp_db: Path):
     assert stats["avg_score"] == 70.0
     assert stats["max_score"] == 80.0
     assert stats["min_score"] == 60.0
+
+
+def test_resume_version_and_record_comparison(temp_db: Path):
+    """Test saving resume version snapshot and comparing two revision runs."""
+    from database.db import save_resume_version, get_resume_versions, compare_analysis_records
+
+    # 1. Test version snapshot
+    v_id = save_resume_version("resume.pdf", "v1.0", {"name": "Alex"}, "Initial version", temp_db)
+    assert v_id == 1
+    versions = get_resume_versions("resume.pdf", temp_db)
+    assert len(versions) == 1
+    assert versions[0]["version_label"] == "v1.0"
+
+    # 2. Test record comparison
+    id_a = save_analysis(
+        resume_name="resume.pdf",
+        job_title="Backend Dev",
+        overall_score=70.0,
+        tfidf_score=65.0,
+        skill_score=75.0,
+        matched_skills=["Python", "FastAPI"],
+        missing_skills=["Docker", "Kubernetes"],
+        quality_score=72.0,
+        ats_score=80.0,
+        job_match_score=68.0,
+        db_path=temp_db
+    )
+
+    id_b = save_analysis(
+        resume_name="resume.pdf",
+        job_title="Backend Dev",
+        overall_score=85.0,
+        tfidf_score=80.0,
+        skill_score=90.0,
+        matched_skills=["Python", "FastAPI", "Docker"],
+        missing_skills=["Kubernetes"],
+        quality_score=84.0,
+        ats_score=92.0,
+        job_match_score=86.0,
+        db_path=temp_db
+    )
+
+    comparison = compare_analysis_records(id_a, id_b, temp_db)
+    assert comparison is not None
+    assert comparison["overall_score_delta"] == 15.0
+    assert comparison["quality_score_delta"] == 12.0
+    assert comparison["ats_score_delta"] == 12.0
+    assert comparison["newly_added_skills"] == ["Docker"]
+

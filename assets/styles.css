@@ -338,3 +338,123 @@ button[kind="secondary"]:hover {
 ::-webkit-scrollbar-thumb:hover {
     background: #475569;
 }
+
+/* -------------------------------------------------------------------------
+   Tri-Score Showcase Cards
+   ------------------------------------------------------------------------- */
+.score-trio-card {
+    background-color: #1E293B;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.score-trio-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+}
+
+.score-quality::before {
+    background: linear-gradient(90deg, #6366F1, #818CF8);
+}
+
+.score-ats::before {
+    background: linear-gradient(90deg, #3B82F6, #60A5FA);
+}
+
+.score-job::before {
+    background: linear-gradient(90deg, #10B981, #34D399);
+}
+
+.score-tag-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+}
+
+/* Check Badges */
+.check-badge-pass {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34D399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.check-badge-warn {
+    background: rgba(245, 158, 11, 0.15);
+    color: #FCD34D;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.check-badge-risk {
+    background: rgba(239, 68, 68, 0.15);
+    color: #FCA5A5;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* Side-by-Side Comparison Box */
+.comparison-box {
+    background: #1A2234;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 14px;
+}
+
+.comparison-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+}
+
+.comparison-original {
+    color: #94A3B8;
+    border-left: 3px solid #64748B;
+    padding-left: 12px;
+}
+
+.comparison-improved {
+    color: #F8FAFC;
+    border-left: 3px solid #10B981;
+    padding-left: 12px;
+}
+
+/* Version Delta Badges */
+.delta-positive {
+    color: #10B981;
+    font-weight: 600;
+}
+
+.delta-negative {
+    color: #EF4444;
+    font-weight: 600;
+}
+

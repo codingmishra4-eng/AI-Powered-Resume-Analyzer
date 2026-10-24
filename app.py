@@ -1,9 +1,16 @@
 """
-ResumeIQ — AI-Powered Resume Analyzer & Job Match Platform
-=========================================================
+ResumeIQ Enterprise — AI-Powered ATS Resume Analyzer & Job Match Platform
+========================================================================
 Main Streamlit Application
-A modern, dark-themed SaaS dashboard for resume parsing, job matching,
-skill gap analysis, and explainable recommendations.
+A modern, dark-themed SaaS platform providing:
+1. Distinct Resume Quality Score (0-100)
+2. Dedicated ATS Parsing Compatibility Score (0-100)
+3. Job Description Match Score (0-100)
+4. Structured editable resume representation
+5. Action verb & quantified metrics audits
+6. AI Resume Assistant & Optimizer
+7. ATS-friendly PDF and DOCX export with self-test verification
+8. Resume version history and score comparison
 """
 
 import io
@@ -19,6 +26,7 @@ import streamlit as st
 
 # Application configuration
 from config import (
+    AI_CONFIG,
     APP_NAME,
     APP_TAGLINE,
     APP_VERSION,
@@ -32,21 +40,35 @@ from config import (
 from analyzer.resume_parser import (
     extract_contact_info,
     extract_text_from_file,
+    parse_full_resume_structure,
     parse_resume_sections,
 )
 from analyzer.skill_extractor import SkillExtractor
-from analyzer.similarity import calculate_similarity, compute_match_details
+from analyzer.similarity import calculate_similarity, calculate_tfidf_similarity, compute_match_details
 from analyzer.recommendations import generate_recommendations
+from analyzer.ats_analyzer import analyze_ats_compatibility
+from analyzer.quality_analyzer import analyze_resume_quality, audit_bullet_points
+from analyzer.job_matcher import match_resume_to_job
+from analyzer.ai_assistant import ResumeAssistant
+from analyzer.resume_builder import (
+    generate_analysis_report,
+    generate_docx_resume,
+    generate_pdf_resume,
+    verify_generated_resume_extractability,
+)
 
 # Database persistence modules
 from database.db import (
     clear_all_analyses,
+    compare_analysis_records,
     delete_analysis,
     get_all_analyses,
     get_analysis_by_id,
     get_history_summary_stats,
+    get_resume_versions,
     init_db,
     save_analysis,
+    save_resume_version,
 )
 
 # Input validators
@@ -61,7 +83,7 @@ from utils.validators import (
 # Streamlit Page Configuration
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title=f"{APP_NAME} — AI Resume Analyzer & Job Match",
+    page_title=f"{APP_NAME} Enterprise — AI Resume Analyzer & ATS Optimizer",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -86,34 +108,28 @@ load_custom_css()
 # Initialize Database
 init_db(DB_PATH)
 
-# Initialize Skill Extractor (cached in session state for efficiency)
+# Initialize Session State Objects
 if "skill_extractor" not in st.session_state:
     st.session_state.skill_extractor = SkillExtractor()
 
+if "ai_assistant" not in st.session_state:
+    st.session_state.ai_assistant = ResumeAssistant()
+
 
 # -----------------------------------------------------------------------------
-# Visualization Helpers (Plotly Dark Theme)
+# Plotly Chart Generators (Dark Theme Cohesion)
 # -----------------------------------------------------------------------------
-def create_score_gauge(score: float, title: str = "Overall Match Score") -> go.Figure:
-    """
-    Creates a modern circular gauge chart indicating match score.
-    """
-    if score >= 75:
-        bar_color = THEME_COLORS["success"]
-    elif score >= 50:
-        bar_color = THEME_COLORS["warning"]
-    else:
-        bar_color = THEME_COLORS["danger"]
-
+def create_score_gauge(score: float, title: str, accent_color: str) -> go.Figure:
+    """Creates a modern circular gauge chart indicating a specific score."""
     fig = go.Figure(
         go.Indicator(
             mode="gauge+number",
             value=score,
-            number={"suffix": "%", "font": {"size": 38, "color": THEME_COLORS["text_primary"]}},
-            title={"text": title, "font": {"size": 16, "color": THEME_COLORS["text_secondary"]}},
+            number={"suffix": "%", "font": {"size": 36, "color": THEME_COLORS["text_primary"]}},
+            title={"text": title, "font": {"size": 15, "color": THEME_COLORS["text_secondary"]}},
             gauge={
                 "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": THEME_COLORS["card_border"]},
-                "bar": {"color": bar_color, "thickness": 0.28},
+                "bar": {"color": accent_color, "thickness": 0.28},
                 "bgcolor": "#0F172A",
                 "borderwidth": 1,
                 "bordercolor": THEME_COLORS["card_border"],
@@ -125,89 +141,45 @@ def create_score_gauge(score: float, title: str = "Overall Match Score") -> go.F
             },
         )
     )
-
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=25, r=25, t=40, b=25),
-        height=220,
+        margin=dict(l=20, r=20, t=35, b=20),
+        height=200,
     )
     return fig
 
 
-def create_skill_breakdown_chart(matched_count: int, missing_count: int, extra_count: int) -> go.Figure:
-    """
-    Creates a clean donut chart displaying the proportions of matched vs missing skills.
-    """
-    labels = ["Matched Skills", "Missing Skills", "Additional Skills"]
-    values = [matched_count, missing_count, extra_count]
-    colors = [THEME_COLORS["success"], THEME_COLORS["danger"], THEME_COLORS["accent_primary"]]
+def create_radar_breakdown(breakdown_dict: Dict[str, float], title: str, color: str) -> go.Figure:
+    """Creates a radar chart showing multi-dimensional sub-scores."""
+    categories = [k.replace("_", " ").title() for k in breakdown_dict.keys()]
+    values = list(breakdown_dict.values())
+    if values:
+        categories.append(categories[0])
+        values.append(values[0])
 
     fig = go.Figure(
         data=[
-            go.Pie(
-                labels=labels,
-                values=values,
-                hole=0.55,
-                marker=dict(colors=colors, line=dict(color="#0F172A", width=2)),
-                textinfo="label+value",
-                hoverinfo="label+percent+value",
-                textfont=dict(color="#F8FAFC", size=13),
+            go.Scatterpolar(
+                r=values,
+                theta=categories,
+                fill="toself",
+                fillcolor=f"rgba{tuple(list(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + [0.2])}",
+                line=dict(color=color, width=2),
             )
         ]
     )
-
     fig.update_layout(
-        showlegend=False,
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 100], gridcolor="#334155", tickfont=dict(color="#94A3B8")),
+            angularaxis=dict(gridcolor="#334155", tickfont=dict(color="#F8FAFC", size=10)),
+            bgcolor="rgba(0,0,0,0)",
+        ),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=20, r=20, t=20, b=20),
-        height=220,
-    )
-    return fig
-
-
-def create_category_skill_bar(by_category_resume: Dict[str, List[str]], by_category_jd: Dict[str, List[str]]) -> go.Figure:
-    """
-    Creates a grouped horizontal bar chart comparing skill counts by domain.
-    """
-    all_categories = sorted(list(set(list(by_category_resume.keys()) + list(by_category_jd.keys()))))
-    if not all_categories:
-        all_categories = ["General Technical"]
-
-    resume_counts = [len(by_category_resume.get(cat, [])) for cat in all_categories]
-    jd_counts = [len(by_category_jd.get(cat, [])) for cat in all_categories]
-
-    fig = go.Figure()
-    fig.add_trace(
-        go.Bar(
-            y=all_categories,
-            x=resume_counts,
-            name="Resume Skills",
-            orientation="h",
-            marker=dict(color=THEME_COLORS["accent_primary"]),
-        )
-    )
-    fig.add_trace(
-        go.Bar(
-            y=all_categories,
-            x=jd_counts,
-            name="Job Requirements",
-            orientation="h",
-            marker=dict(color=THEME_COLORS["secondary_accent"] if "secondary_accent" in THEME_COLORS else "#38BDF8"),
-        )
-    )
-
-    fig.update_layout(
-        barmode="group",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=THEME_COLORS["text_secondary"]),
-        margin=dict(l=10, r=20, t=20, b=20),
+        margin=dict(l=35, r=35, t=30, b=30),
         height=260,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        xaxis=dict(gridcolor="#334155", title="Count of Skills"),
-        yaxis=dict(gridcolor="#1E293B"),
+        showlegend=False,
     )
     return fig
 
@@ -232,669 +204,892 @@ def load_sample_jd_content() -> str:
 
 
 # -----------------------------------------------------------------------------
-# Sidebar Navigation & Settings
+# Core Analysis Engine Dispatcher
+# -----------------------------------------------------------------------------
+def run_full_analysis(raw_text: str, file_name: str, job_desc: str = "", target_title: str = ""):
+    """Executes the full evaluation pipeline across Quality, ATS, and Job Matching."""
+    extractor = st.session_state.skill_extractor
+
+    # 1. Structured Resume Parsing
+    structured = parse_full_resume_structure(raw_text, file_name)
+    parsed_sections = structured["sections"]
+    contact_info = structured["contact"]
+
+    # 2. Extract Skills
+    skills_data = extractor.extract_skills(raw_text)
+    detected_skills = skills_data["all_skills"]
+
+    # 3. Dedicated ATS Compatibility Analysis
+    ats_res = analyze_ats_compatibility(
+        raw_text=raw_text,
+        parsed_sections=parsed_sections,
+        contact_info=contact_info,
+        page_count=max(1, structured["word_count"] // 450),
+        file_name=file_name,
+    )
+
+    # 4. Dedicated Resume Quality Analysis
+    quality_res = analyze_resume_quality(
+        raw_text=raw_text,
+        parsed_sections=parsed_sections,
+        structured_data=structured,
+        detected_skills=detected_skills,
+    )
+
+    # 5. Job Description Match Analysis
+    job_match_res = match_resume_to_job(
+        resume_text=raw_text,
+        job_description=job_desc,
+        target_job_title=target_title,
+        extractor=extractor,
+    )
+
+    # 6. Legacy / Hybrid Compatibility for Overview
+    skill_comp = extractor.compare_skills(
+        detected_skills,
+        extractor.extract_skills(job_desc)["all_skills"] if job_desc else set(),
+    )
+    legacy_match = compute_match_details(raw_text, job_desc or raw_text, skill_comp)
+
+    # Store into session state
+    st.session_state["structured_resume"] = structured
+    st.session_state["raw_resume_text"] = raw_text
+    st.session_state["resume_file_name"] = file_name
+    st.session_state["ats_analysis"] = ats_res
+    st.session_state["quality_analysis"] = quality_res
+    st.session_state["job_match_analysis"] = job_match_res
+    st.session_state["legacy_match"] = legacy_match
+    st.session_state["detected_skills"] = detected_skills
+    st.session_state["skills_data"] = skills_data
+    st.session_state["target_jd"] = job_desc
+    st.session_state["target_job_title"] = target_title
+
+
+# -----------------------------------------------------------------------------
+# Sidebar Navigation & Platform Status
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.markdown(
         f"""
-        <div style="padding: 10px 0 20px 0;">
-            <div class="brand-badge">Engine v{APP_VERSION}</div>
-            <h2 style="margin: 0; font-size: 1.6rem; color: #F8FAFC;">🎯 {APP_NAME}</h2>
-            <p style="font-size: 0.85rem; color: #94A3B8; margin-top: 4px;">{APP_TAGLINE}</p>
+        <div style="padding: 6px 0 16px 0;">
+            <div class="brand-badge">Enterprise v{APP_VERSION}</div>
+            <h2 style="margin: 0; font-size: 1.5rem; color: #F8FAFC;">🎯 {APP_NAME}</h2>
+            <p style="font-size: 0.82rem; color: #94A3B8; margin-top: 3px;">{APP_TAGLINE}</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("---")
-    menu_choice = st.radio(
-        "Navigation",
-        [
-            "⚡ Match & Analyze",
-            "📊 Analysis History",
-            "📚 Skill Taxonomy",
-            "📖 How It Works",
-        ],
-        index=0,
-    )
+    nav_options = [
+        "📊 Dashboard Overview",
+        "📄 Upload & Parsed Resume",
+        "🎯 ATS Compatibility",
+        "📋 Job Description Match",
+        "🛠 Skills & Keywords",
+        "💼 Experience & Achievements",
+        "✍ AI Resume Assistant",
+        "🏗 Resume Builder & Export",
+        "🕒 History & Comparisons",
+        "⚙ Settings & API",
+    ]
+
+    selected_page = st.radio("Navigation", nav_options, index=0)
 
     st.markdown("---")
+
+    # One-Click Demo Mode Button in Sidebar
+    if st.button("🚀 Load Demo Resume & Job", type="secondary"):
+        demo_resume = load_sample_resume_content()
+        demo_jd = load_sample_jd_content()
+        run_full_analysis(
+            raw_text=demo_resume,
+            file_name="Alex_Rivera_Sample_Resume.pdf",
+            job_desc=demo_jd,
+            target_title="Senior Python Backend Engineer",
+        )
+        st.success("Sample data loaded & analyzed!")
+        st.rerun()
+
     st.markdown(
         """
-        <div style="font-size: 0.8rem; color: #94A3B8; line-height: 1.4;">
-            <strong style="color: #F8FAFC;">🔒 Privacy & Storage:</strong><br>
-            All processing runs 100% locally on your machine.
-            Full resume text is never transmitted to external APIs or stored in database logs.
+        <div style="font-size: 0.78rem; color: #94A3B8; line-height: 1.4; margin-top: 10px;">
+            <strong style="color: #F8FAFC;">🔒 Privacy First:</strong><br>
+            All parsing and vector processing runs 100% locally on your computer.
+            Full resume text is never sent to public APIs or logged to disk.
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
-# -----------------------------------------------------------------------------
-# Page 1: Match & Analyze (Main Dashboard)
-# -----------------------------------------------------------------------------
-if menu_choice == "⚡ Match & Analyze":
-    # Top stats bar
+# =============================================================================
+# PAGE 1: DASHBOARD OVERVIEW
+# =============================================================================
+if selected_page == "📊 Dashboard Overview":
+    st.markdown("## 📊 Executive Dashboard Overview")
+    st.caption("Comprehensive multi-dimensional health overview of candidate resumes, ATS readiness, and job alignment.")
+
+    # Top Summary Stat Cards from SQLite Database
     stats = get_history_summary_stats(DB_PATH)
-    extractor = st.session_state.skill_extractor
-    total_tax_skills = sum(len(skills) for skills in extractor.taxonomy.values())
 
-    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-    with col_s1:
-        st.markdown(
-            f"""
-            <div class="stat-card">
-                <div class="stat-label">Total Analyses</div>
-                <div class="stat-value">{stats['total_analyses']}</div>
-                <div class="stat-subtext">Recorded locally</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with col_s2:
-        st.markdown(
-            f"""
-            <div class="stat-card">
-                <div class="stat-label">Average Match</div>
-                <div class="stat-value">{stats['avg_score']}%</div>
-                <div class="stat-subtext">Across historical runs</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with col_s3:
-        st.markdown(
-            f"""
-            <div class="stat-card">
-                <div class="stat-label">Highest Score</div>
-                <div class="stat-value">{stats['max_score']}%</div>
-                <div class="stat-subtext">Top candidate alignment</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with col_s4:
-        st.markdown(
-            f"""
-            <div class="stat-card">
-                <div class="stat-label">Recognized Skills</div>
-                <div class="stat-value">{total_tax_skills}</div>
-                <div class="stat-subtext">In taxonomy dictionary</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    has_active_analysis = "structured_resume" in st.session_state
 
-    st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
+    # Top Three Primary Score Showcase Cards
+    c_s1, c_s2, c_s3 = st.columns(3)
 
-    # Demo mode one-click pre-fill
-    col_demo, col_clear = st.columns([4, 1])
-    with col_demo:
-        if st.button("🚀 Load Fictional Sample Resume & Job Description", type="secondary"):
-            st.session_state["demo_resume_text"] = load_sample_resume_content()
-            st.session_state["demo_jd_text"] = load_sample_jd_content()
-            st.session_state["demo_file_name"] = "Alex_Rivera_Sample_Resume.txt"
-            st.session_state["job_title_input"] = "Senior Python Backend Engineer"
-            st.success("Sample data loaded! Click 'Analyze Resume & Job Match' below to evaluate.")
+    if has_active_analysis:
+        q_res = st.session_state["quality_analysis"]
+        ats_res = st.session_state["ats_analysis"]
+        jm_res = st.session_state["job_match_analysis"]
 
-    # Two column layout: Left = Resume, Right = Job Description
-    col_left, col_right = st.columns([1, 1], gap="medium")
-
-    # ----- Left Column: Resume Upload -----
-    with col_left:
-        st.markdown("### 📄 1. Candidate Resume")
-
-        uploaded_file = st.file_uploader(
-            "Upload Resume (PDF, DOCX, TXT)",
-            type=["pdf", "docx", "txt"],
-            help="Maximum file size: 5MB. Scanned image PDFs are flagged for OCR.",
-        )
-
-        resume_text = ""
-        resume_name = "Untitled Resume"
-        is_scanned_flag = False
-        scan_message = ""
-
-        # Check if user uploaded a file
-        if uploaded_file is not None:
-            resume_name = uploaded_file.name
-            file_bytes = uploaded_file.getvalue()
-            is_valid, err_msg = validate_file_upload(resume_name, len(file_bytes))
-
-            if not is_valid:
-                st.error(f"Upload Error: {err_msg}")
-            else:
-                extracted, pages, warning_msg = extract_text_from_file(file_bytes, resume_name)
-                if warning_msg and "Notice: This PDF appears to be a scanned" in warning_msg:
-                    st.warning(warning_msg)
-                    is_scanned_flag = True
-                    scan_message = warning_msg
-                elif warning_msg:
-                    st.error(warning_msg)
-                
-                resume_text = extracted
-                st.session_state["current_resume_text"] = resume_text
-                st.session_state["current_resume_name"] = resume_name
-
-        # Fallback to demo resume if loaded and no file uploaded
-        elif "demo_resume_text" in st.session_state and st.session_state["demo_resume_text"]:
-            resume_text = st.session_state["demo_resume_text"]
-            resume_name = st.session_state.get("demo_file_name", "Sample_Resume.txt")
-            st.info(f"Using pre-loaded demo resume: **{resume_name}**")
-
-        # Display resume summary if text is available
-        if resume_text:
-            word_count = len(resume_text.split())
-            st.caption(f"✓ Extracted {len(resume_text):,} characters ({word_count:,} words) from `{resume_name}`")
-
-            # Extract Contact Information
-            contact_data = extract_contact_info(resume_text)
+        with c_s1:
             st.markdown(
                 f"""
-                <div style="background: #1E293B; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.85rem;">
-                    <strong>Contact Indicators:</strong><br>
-                    📧 Email: <code>{contact_data['email'] or 'Not Detected'}</code> |
-                    📞 Phone: <code>{contact_data['phone'] or 'Not Detected'}</code><br>
-                    🔗 LinkedIn: <code>{contact_data['linkedin'] or 'Not Detected'}</code> |
-                    💻 GitHub: <code>{contact_data['github'] or 'Not Detected'}</code>
+                <div class="score-trio-card score-quality">
+                    <span class="score-tag-badge" style="background: rgba(99, 102, 241, 0.2); color: #A5B4FC;">Quality Score</span>
+                    <div style="font-size: 2.2rem; font-weight: 700; color: #F8FAFC;">{q_res['quality_score']}%</div>
+                    <div style="font-size: 0.85rem; font-weight: 600; color: #818CF8; margin-top: 4px;">{q_res['rating']}</div>
+                    <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 6px;">Evaluates content depth, metrics, and action verbs.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-            with st.expander("👁 View Extracted Resume Text"):
-                st.text_area("Extracted Resume Content", resume_text, height=220, disabled=True)
+        with c_s2:
+            st.markdown(
+                f"""
+                <div class="score-trio-card score-ats">
+                    <span class="score-tag-badge" style="background: rgba(59, 130, 246, 0.2); color: #93C5FD;">ATS Compatibility</span>
+                    <div style="font-size: 2.2rem; font-weight: 700; color: #F8FAFC;">{ats_res['ats_score']}%</div>
+                    <div style="font-size: 0.85rem; font-weight: 600; color: #60A5FA; margin-top: 4px;">{ats_res['score_category']}</div>
+                    <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 6px;">Evaluates digital text layer, headings, and formatting risks.</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-    # ----- Right Column: Job Description -----
-    with col_right:
-        st.markdown("### 📋 2. Target Job Description")
-
-        default_title = st.session_state.get("job_title_input", "")
-        job_title = st.text_input(
-            "Target Job Title (Optional)",
-            value=default_title,
-            placeholder="e.g. Senior Python Backend Engineer",
-        )
-
-        default_jd = st.session_state.get("demo_jd_text", "")
-        job_desc_input = st.text_area(
-            "Paste Job Description / Requirements",
-            value=default_jd,
-            height=260,
-            placeholder="Paste the job responsibilities, required qualifications, and tech stack here...",
-        )
-
-        jd_words = len(job_desc_input.split())
-        st.caption(f"Job Description length: {len(job_desc_input):,} characters ({jd_words} words)")
-
-    # -------------------------------------------------------------------------
-    # Analysis Trigger Button
-    # -------------------------------------------------------------------------
-    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-    analyze_btn = st.button("⚡ Analyze Resume & Job Match", type="primary", use_container_width=True)
-
-    if analyze_btn:
-        if not resume_text or not resume_text.strip():
-            st.error("Please upload a resume (PDF, DOCX, TXT) or load the sample resume first.")
-        else:
-            is_jd_valid, jd_err = validate_job_description(job_desc_input)
-            if not is_jd_valid:
-                st.error(f"Job Description Notice: {jd_err}")
+        with c_s3:
+            if jm_res.get("has_job_description"):
+                jm_score_str = f"{jm_res['job_match_score']}%"
+                jm_fit = jm_res["fit_level"]
+                jm_sub = f"Evaluated against: {st.session_state.get('target_job_title', 'Target Role')}"
             else:
-                with st.spinner("Analyzing semantics, matching skills, and compiling recommendations..."):
-                    # 1. Skill Extraction
-                    resume_skills_data = extractor.extract_skills(resume_text)
-                    jd_skills_data = extractor.extract_skills(job_desc_input)
+                jm_score_str = "Not Evaluated"
+                jm_fit = "Awaiting Job Description"
+                jm_sub = "Paste a job description to calculate target alignment."
 
-                    # 2. Skill Comparison
-                    skill_comp = extractor.compare_skills(
-                        resume_skills_data["all_skills"],
-                        jd_skills_data["all_skills"]
-                    )
+            st.markdown(
+                f"""
+                <div class="score-trio-card score-job">
+                    <span class="score-tag-badge" style="background: rgba(16, 185, 129, 0.2); color: #6EE7B7;">Job Description Match</span>
+                    <div style="font-size: 2.2rem; font-weight: 700; color: #F8FAFC;">{jm_score_str}</div>
+                    <div style="font-size: 0.85rem; font-weight: 600; color: #34D399; margin-top: 4px;">{jm_fit}</div>
+                    <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 6px;">{jm_sub}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    else:
+        with c_s1:
+            st.markdown(
+                """
+                <div class="score-trio-card score-quality">
+                    <span class="score-tag-badge" style="background: rgba(99, 102, 241, 0.2); color: #A5B4FC;">Quality Score</span>
+                    <div style="font-size: 2.2rem; font-weight: 700; color: #94A3B8;">--%</div>
+                    <div style="font-size: 0.82rem; color: #94A3B8; margin-top: 6px;">Upload a resume to calculate content quality.</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with c_s2:
+            st.markdown(
+                """
+                <div class="score-trio-card score-ats">
+                    <span class="score-tag-badge" style="background: rgba(59, 130, 246, 0.2); color: #93C5FD;">ATS Compatibility</span>
+                    <div style="font-size: 2.2rem; font-weight: 700; color: #94A3B8;">--%</div>
+                    <div style="font-size: 0.82rem; color: #94A3B8; margin-top: 6px;">Upload a resume to analyze parsing risks.</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with c_s3:
+            st.markdown(
+                """
+                <div class="score-trio-card score-job">
+                    <span class="score-tag-badge" style="background: rgba(16, 185, 129, 0.2); color: #6EE7B7;">Job Description Match</span>
+                    <div style="font-size: 2.2rem; font-weight: 700; color: #94A3B8;">--%</div>
+                    <div style="font-size: 0.82rem; color: #94A3B8; margin-top: 6px;">Paste a job description to assess keyword fit.</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-                    # 3. Text Preprocessing, TF-IDF and Composite Matching
-                    match_details = compute_match_details(
-                        resume_text,
-                        job_desc_input,
-                        skill_comp
-                    )
+    st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
 
-                    # 4. Resume Section Parsing
-                    parsed_sections = parse_resume_sections(resume_text)
-                    contact_info = extract_contact_info(resume_text)
+    # Secondary Metrics & Quick Actions
+    col_d1, col_d2 = st.columns([2, 1])
 
-                    # 5. Rule-Based Recommendations
-                    recommendations = generate_recommendations(
-                        resume_text,
-                        parsed_sections,
-                        contact_info,
-                        skill_comp
-                    )
+    with col_d1:
+        with st.container(border=True):
+            st.markdown("### 🎯 Prioritized Next Actions")
+            if has_active_analysis:
+                q_findings = st.session_state["quality_analysis"]["findings"]
+                ats_fixes = st.session_state["ats_analysis"]["prioritized_fixes"]
 
-                    # Store results in session state
-                    st.session_state["analysis_result"] = {
-                        "resume_name": resume_name,
-                        "job_title": job_title or "Target Position",
-                        "resume_text": resume_text,
-                        "job_desc": job_desc_input,
-                        "match_details": match_details,
-                        "skill_comp": skill_comp,
-                        "resume_skills_data": resume_skills_data,
-                        "jd_skills_data": jd_skills_data,
-                        "parsed_sections": parsed_sections,
-                        "contact_info": contact_info,
-                        "recommendations": recommendations,
-                    }
-                    st.success("Analysis complete! Review the detailed findings below.")
+                high_priority = [f for f in q_findings if f["priority"] == "High"]
+                if high_priority:
+                    st.error(f"Found **{len(high_priority)} High-Priority Issue(s)** that directly affect screening:")
+                    for h in high_priority[:3]:
+                        st.markdown(f"- **{h['title']}** ({h['section']}): {h['recommendation']}")
+                elif ats_fixes:
+                    st.warning("ATS Parsing Improvements Suggested:")
+                    for fix in ats_fixes[:2]:
+                        st.markdown(f"- {fix}")
+                else:
+                    st.success("🎉 Outstanding! No critical issues or parsing risks detected.")
+            else:
+                st.info("No resume loaded yet. Click '🚀 Load Demo Resume & Job' in the sidebar or go to '📄 Upload & Parsed Resume' to begin.")
 
-    # -------------------------------------------------------------------------
-    # Render Analysis Results
-    # -------------------------------------------------------------------------
-    if "analysis_result" in st.session_state:
-        res = st.session_state["analysis_result"]
-        md = res["match_details"]
-        sc = res["skill_comp"]
+    with col_d2:
+        with st.container(border=True):
+            st.markdown("### ⚡ Quick Navigation")
+            st.markdown(
+                """
+                - 📄 **Review Parsed Data:** Check name and extracted roles.
+                - 🎯 **ATS Health Check:** See formatting and font risks.
+                - 📋 **Match Job Post:** Compare required vs preferred skills.
+                - ✍ **AI Optimizer:** Rewrite bullets with Google XYZ formula.
+                - 🏗 **Export ATS Resume:** Download verified PDF or DOCX.
+                """
+            )
+
+    # Historical Session Overview
+    records = get_all_analyses(DB_PATH)
+    if records:
+        st.markdown("---")
+        st.markdown("### 🕒 Recently Analyzed Sessions")
+        recent_df = pd.DataFrame(
+            [
+                {
+                    "ID": r["id"],
+                    "Timestamp": r["timestamp"],
+                    "Resume": r["resume_name"],
+                    "Target Role": r["job_title"],
+                    "Quality": f"{r.get('quality_score', r['overall_score'])}%",
+                    "ATS": f"{r.get('ats_score', 85.0)}%",
+                    "Job Match": f"{r.get('job_match_score', r['overall_score'])}%",
+                }
+                for r in records[:5]
+            ]
+        )
+        st.dataframe(recent_df, hide_index=True)
+
+
+# =============================================================================
+# PAGE 2: UPLOAD & PARSED RESUME (EDITABLE)
+# =============================================================================
+elif selected_page == "📄 Upload & Parsed Resume":
+    st.markdown("## 📄 Upload & Structured Resume Representation")
+    st.caption("Upload your resume (PDF, DOCX, TXT) and inspect or correct parsed fields before analysis.")
+
+    col_u1, col_u2 = st.columns([1, 1], gap="medium")
+
+    with col_u1:
+        uploaded_file = st.file_uploader(
+            "Select Resume Document",
+            type=["pdf", "docx", "txt"],
+            help="Maximum file size 5MB. Image-only PDFs will be flagged for OCR.",
+        )
+
+        target_title_in = st.text_input("Target Job Title (Optional)", value=st.session_state.get("target_job_title", ""), placeholder="e.g. Senior Backend Engineer")
+        target_jd_in = st.text_area("Target Job Description (Optional)", value=st.session_state.get("target_jd", ""), height=180, placeholder="Paste job posting here to evaluate match...")
+
+        if st.button("⚡ Parse & Analyze Uploaded Resume", type="primary"):
+            if uploaded_file is not None:
+                bytes_data = uploaded_file.getvalue()
+                valid, msg = validate_file_upload(uploaded_file.name, len(bytes_data))
+                if not valid:
+                    st.error(msg)
+                else:
+                    text, pages, warning = extract_text_from_file(bytes_data, uploaded_file.name)
+                    if warning and "scanned" in warning.lower():
+                        st.warning(warning)
+                    run_full_analysis(text, uploaded_file.name, target_jd_in, target_title_in)
+                    st.success("Resume parsed successfully!")
+                    st.rerun()
+            else:
+                st.error("Please select a file to upload or load demo data.")
+
+    with col_u2:
+        if "structured_resume" in st.session_state:
+            sr = st.session_state["structured_resume"]
+            st.markdown("### ✏️ Verified Structured Profile")
+            st.caption("Review extracted fields. You can correct any OCR or parsing misreadings below:")
+
+            with st.form("edit_parsed_resume_form"):
+                e_name = st.text_input("Full Name", value=sr.get("candidate_name", ""))
+                e_email = st.text_input("Email Address", value=sr.get("contact", {}).get("email") or "")
+                e_phone = st.text_input("Phone Number", value=sr.get("contact", {}).get("phone") or "")
+                e_location = st.text_input("Location", value=sr.get("contact", {}).get("location") or "")
+                e_linkedin = st.text_input("LinkedIn Profile", value=sr.get("contact", {}).get("linkedin") or "")
+                e_github = st.text_input("GitHub Profile", value=sr.get("contact", {}).get("github") or "")
+                e_summary = st.text_area("Professional Summary", value=sr.get("summary", ""), height=100)
+
+                submit_edits = st.form_submit_button("💾 Save Verified Profile & Re-Score")
+                if submit_edits:
+                    sr["candidate_name"] = e_name
+                    sr["contact"]["email"] = e_email
+                    sr["contact"]["phone"] = e_phone
+                    sr["contact"]["location"] = e_location
+                    sr["contact"]["linkedin"] = e_linkedin
+                    sr["contact"]["github"] = e_github
+                    sr["summary"] = e_summary
+
+                    # Update raw text with corrected header
+                    updated_text = f"{e_name}\n{e_email} | {e_phone} | {e_location}\n{e_summary}\n\n" + st.session_state["raw_resume_text"]
+                    run_full_analysis(updated_text, sr["file_name"], target_jd_in, target_title_in)
+                    st.success("Profile updated and re-analyzed!")
+                    st.rerun()
+        else:
+            st.info("Upload a document on the left or click '🚀 Load Demo Resume & Job' in the sidebar.")
+
+
+# =============================================================================
+# PAGE 3: ATS COMPATIBILITY
+# =============================================================================
+elif selected_page == "🎯 ATS Compatibility":
+    st.markdown("## 🎯 ATS Parsing Compatibility Diagnostics")
+    st.caption("Detailed technical inspection measuring how reliably commercial Applicant Tracking Systems parse this resume.")
+
+    if "ats_analysis" not in st.session_state:
+        st.warning("Please upload a resume or load demo data to view ATS diagnostics.")
+    else:
+        ats = st.session_state["ats_analysis"]
+
+        col_a1, col_a2 = st.columns([1, 1], gap="medium")
+
+        with col_a1:
+            with st.container(border=True):
+                st.plotly_chart(
+                    create_score_gauge(ats["ats_score"], "ATS Parsing Score", THEME_COLORS["accent_secondary"]),
+                )
+                st.markdown(f"**Readiness Level:** `{ats['score_category']}`")
+                st.markdown(f"*{ats['summary']}*")
+                st.caption(ats["disclaimer"])
+
+        with col_a2:
+            with st.container(border=True):
+                st.markdown("#### Dimensional Breakdown")
+                st.plotly_chart(
+                    create_radar_breakdown(ats["breakdown"], "ATS Dimensions", THEME_COLORS["accent_secondary"]),
+                )
 
         st.markdown("---")
-        st.markdown(f"## 🎯 Match Assessment: {res['job_title']}")
-        st.caption(f"Evaluated against resume: **{res['resume_name']}**")
 
-        # Top Metric Showcase (Gauge + Donut + Summary Cards)
-        m_col1, m_col2, m_col3 = st.columns([1.1, 1.1, 1.3], gap="medium")
+        # Diagnostics Checks: Passed, Warnings, Risks
+        c_p, c_w, c_r = st.columns(3)
 
-        with m_col1:
-            st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            st.markdown(f"<div class='card-title'>Overall Compatibility: <strong>{md['overall_score']}%</strong></div>", unsafe_allow_html=True)
-            st.plotly_chart(create_score_gauge(md["overall_score"]), use_container_width=True)
-            st.markdown(
-                f"<div style='text-align: center; font-size: 0.9rem; font-weight: 600; color: #818CF8;'>Rating: {md['fit_level']}</div>"
-                f"<div style='text-align: center; font-size: 0.8rem; color: #94A3B8; margin-top: 4px;'>{md['fit_description']}</div>",
-                unsafe_allow_html=True,
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        with m_col2:
-            st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            st.markdown("<div class='card-title'>Skill Match Breakdown</div>", unsafe_allow_html=True)
-            st.plotly_chart(
-                create_skill_breakdown_chart(
-                    sc["matched_count"],
-                    sc["missing_count"],
-                    len(sc["additional_skills"])
-                ),
-                use_container_width=True,
-            )
-            st.markdown(
-                f"""
-                <div style="display: flex; justify-content: space-around; font-size: 0.85rem; text-align: center;">
-                    <div><span style="color: #10B981; font-weight: 700;">{sc['matched_count']}</span><br><span style="color: #94A3B8;">Matched</span></div>
-                    <div><span style="color: #EF4444; font-weight: 700;">{sc['missing_count']}</span><br><span style="color: #94A3B8;">Missing</span></div>
-                    <div><span style="color: #6366F1; font-weight: 700;">{len(sc['additional_skills'])}</span><br><span style="color: #94A3B8;">Additional</span></div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        with m_col3:
-            st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            st.markdown("<div class='card-title'>Explainable Scoring Model</div>", unsafe_allow_html=True)
-            st.markdown(
-                f"""
-                <div style="font-size: 0.88rem; line-height: 1.6; color: #CBD5E1;">
-                    ResumeIQ uses a deterministic, transparent composite model:
-                    <ul style="padding-left: 20px; margin-top: 8px;">
-                        <li><strong>Skill Overlap ({md['skill_weight']}% weight):</strong> {md['skill_score_pct']}% direct coverage of required skills.</li>
-                        <li><strong>TF-IDF Vocabulary ({md['tfidf_weight']}% weight):</strong> {md['tfidf_score_pct']}% semantic and contextual term alignment.</li>
-                    </ul>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            # Top keywords driving similarity
-            if md["top_shared_keywords"]:
-                st.markdown("<div style='font-size: 0.85rem; font-weight: 600; color: #F8FAFC; margin-top: 10px;'>Top Co-occurring Keywords:</div>", unsafe_allow_html=True)
-                kw_pills = "".join(
-                    [f"<span class='skill-pill skill-neutral'>{word}</span> " for word, _ in md["top_shared_keywords"][:6]]
-                )
-                st.markdown(f"<div class='skill-pill-container'>{kw_pills}</div>", unsafe_allow_html=True)
-
-            st.markdown(
-                f"<div class='disclaimer-box'><strong>Ethical Transparency:</strong> {md['disclaimer']}</div>",
-                unsafe_allow_html=True,
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        # ---------------------------------------------------------------------
-        # Detailed Tabs: Skills, Recommendations, Resume Sections
-        # ---------------------------------------------------------------------
-        tab_skills, tab_recs, tab_sections = st.tabs(
-            ["🛠 Skill Gap Analysis", "💡 Actionable Recommendations", "📑 Parsed Resume Sections"]
-        )
-
-        # Tab 1: Skill Gap Analysis
-        with tab_skills:
-            st.markdown("### Skill Overlap & Gap Matrix")
-
-            c_gap1, c_gap2 = st.columns(2)
-
-            with c_gap1:
-                st.markdown(f"#### ✅ Matched Skills ({sc['matched_count']})")
-                if sc["matched_skills"]:
-                    pills_html = "".join(
-                        [f"<span class='skill-pill skill-matched'>{s}</span>" for s in sc["matched_skills"]]
-                    )
-                    st.markdown(f"<div class='skill-pill-container'>{pills_html}</div>", unsafe_allow_html=True)
-                else:
-                    st.info("No direct skill matches detected against the catalog.")
-
-                st.markdown(f"#### ➕ Additional Candidate Skills ({len(sc['additional_skills'])})")
-                st.caption("Skills present in your resume that were not explicitly demanded by this job description:")
-                if sc["additional_skills"]:
-                    add_pills = "".join(
-                        [f"<span class='skill-pill skill-additional'>{s}</span>" for s in sc["additional_skills"]]
-                    )
-                    st.markdown(f"<div class='skill-pill-container'>{add_pills}</div>", unsafe_allow_html=True)
-                else:
-                    st.caption("No extra catalog skills detected.")
-
-            with c_gap2:
-                st.markdown(f"#### ❌ Missing Skills Requested ({sc['missing_count']})")
-                st.caption("Skills explicitly required or mentioned in the job description that were absent from your resume:")
-                if sc["missing_skills"]:
-                    missing_pills = "".join(
-                        [f"<span class='skill-pill skill-missing'>{s}</span>" for s in sc["missing_skills"]]
-                    )
-                    st.markdown(f"<div class='skill-pill-container'>{missing_pills}</div>", unsafe_allow_html=True)
-                else:
-                    st.success("Outstanding! Your resume covers 100% of the skills identified in this job post.")
-
-                if sc["suggested_priorities"]:
-                    st.markdown("#### 🎯 Recommended Learning Priorities")
-                    st.caption("Prioritized technical competencies to study or highlight first:")
-                    for idx, s in enumerate(sc["suggested_priorities"], 1):
-                        st.markdown(f"**{idx}. {s}**")
-
-            # Domain breakdown chart
-            st.markdown("---")
-            st.markdown("#### Skill Distribution by Domain")
-            st.plotly_chart(
-                create_category_skill_bar(
-                    res["resume_skills_data"]["by_category"],
-                    res["jd_skills_data"]["by_category"],
-                ),
-                use_container_width=True,
-            )
-
-        # Tab 2: Recommendations
-        with tab_recs:
-            st.markdown("### Practical, Rule-Based Improvement Suggestions")
-            st.caption("Targeted suggestions generated strictly from your resume data, section structures, and skill gaps.")
-
-            for rec in res["recommendations"]:
-                priority_class = f"priority-{rec['priority'].lower()}"
-                badge_class = f"badge-{rec['priority'].lower()}"
+        with c_p:
+            st.markdown(f"#### ✅ Passed Checks ({len(ats['passed_checks'])})")
+            for p in ats["passed_checks"]:
                 st.markdown(
                     f"""
-                    <div class="rec-card {priority_class}">
-                        <div class="rec-header">
-                            <span class="rec-title">{rec['title']}</span>
-                            <span class="rec-badge {badge_class}">{rec['priority']} Priority</span>
-                        </div>
-                        <p class="rec-advice">{rec['advice']}</p>
+                    <div style="background: #1E293B; border-left: 3px solid #10B981; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 0.85rem;">
+                        <strong>{p['title']}</strong><br>
+                        <span style="color: #94A3B8;">{p['description']}</span>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-        # Tab 3: Parsed Resume Sections
-        with tab_sections:
-            st.markdown("### Transparent Section Parser Inspection")
-            st.caption("Shows how Applicant Tracking Systems (ATS) identify and segment your resume headers:")
-
-            for sec_name, sec_content in res["parsed_sections"].items():
-                is_detected = sec_content != "Not Detected"
-                status_icon = "🟢 Detected" if is_detected else "🔴 Not Detected"
-
-                with st.expander(f"{sec_name} — {status_icon}", expanded=is_detected):
-                    if is_detected:
-                        st.text_area(f"{sec_name} Content", sec_content, height=140, key=f"sec_{sec_name}")
-                    else:
-                        st.warning(
-                            f"The parser could not locate an obvious '{sec_name.upper()}' heading. "
-                            "Consider adding a clearly formatted heading to assist automated parsers."
-                        )
-
-        # ---------------------------------------------------------------------
-        # Save to Database History Section
-        # -------------------------------------------------------------------------
-        st.markdown("---")
-        st.markdown("### 💾 Save to Analysis History")
-        col_h1, col_h2 = st.columns([3, 1])
-        with col_h1:
-            save_notes = st.text_input("Add an optional note for this run", placeholder="e.g. Version 2 with Docker added")
-        with col_h2:
-            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            if st.button("Save Record to SQLite", type="primary"):
-                saved_id = save_analysis(
-                    resume_name=res["resume_name"],
-                    job_title=res["job_title"],
-                    overall_score=md["overall_score"],
-                    tfidf_score=md["tfidf_score_pct"],
-                    skill_score=md["skill_score_pct"],
-                    matched_skills=sc["matched_skills"],
-                    missing_skills=sc["missing_skills"],
-                    notes=save_notes,
-                    db_path=DB_PATH,
-                )
-                st.success(f"Analysis saved locally with Record ID #{saved_id}!")
-
-
-# -----------------------------------------------------------------------------
-# Page 2: Analysis History
-# -----------------------------------------------------------------------------
-elif menu_choice == "📊 Analysis History":
-    st.markdown("## 📊 Analysis History")
-    st.caption("View and manage your locally saved resume evaluation sessions.")
-
-    records = get_all_analyses(DB_PATH)
-
-    if not records:
-        st.markdown(
-            """
-            <div class="empty-state">
-                <div class="empty-state-icon">📂</div>
-                <div class="empty-state-title">No Historical Records Found</div>
-                <div class="empty-state-desc">
-                    You haven't saved any resume evaluations yet. Run an analysis from the 'Match & Analyze' tab
-                    and click 'Save Record to SQLite' to populate your history.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        # History Action Bar
-        col_act1, col_act2 = st.columns([4, 1])
-        with col_act1:
-            st.info(f"Displaying **{len(records)}** saved analysis records. Database: `{DB_PATH.name}`")
-        with col_act2:
-            if st.button("🗑 Clear All Records", type="secondary"):
-                clear_all_analyses(DB_PATH)
-                st.rerun()
-
-        # Render records as interactive expandable cards
-        for rec in records:
-            score = rec["overall_score"]
-            score_color = "#10B981" if score >= 75 else ("#F59E0B" if score >= 50 else "#EF4444")
-
-            with st.expander(f"Record #{rec['id']}: {rec['job_title']} — {score}% Match ({rec['timestamp']})"):
-                col_r1, col_r2, col_r3 = st.columns([2, 2, 1])
-                with col_r1:
-                    st.markdown(f"**Resume File:** `{rec['resume_name']}`")
-                    st.markdown(f"**Date:** {rec['timestamp']}")
-                    if rec["notes"]:
-                        st.markdown(f"**Notes:** *{rec['notes']}*")
-
-                with col_r2:
+        with c_w:
+            st.markdown(f"#### ⚠️ Parsing Warnings ({len(ats['warning_checks'])})")
+            if ats["warning_checks"]:
+                for w in ats["warning_checks"]:
                     st.markdown(
                         f"""
-                        <div style="font-size: 0.9rem;">
-                            <strong>Overall Score:</strong> <span style="color: {score_color}; font-weight: 700;">{score}%</span><br>
-                            <strong>TF-IDF Score:</strong> {rec['tfidf_score']}%<br>
-                            <strong>Skill Coverage:</strong> {rec['skill_score']}%
+                        <div style="background: #1E293B; border-left: 3px solid #F59E0B; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 0.85rem;">
+                            <strong>{w['title']}</strong><br>
+                            <span style="color: #CBD5E1;">{w['description']}</span><br>
+                            <em style="color: #FCD34D;">Recommendation: {w.get('recommendation', '')}</em>
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
+            else:
+                st.caption("No formatting warnings detected.")
 
-                with col_r3:
-                    if st.button("Delete Record", key=f"del_{rec['id']}", type="secondary"):
+        with c_r:
+            st.markdown(f"#### ❌ Critical Risks ({len(ats['risk_checks'])})")
+            if ats["risk_checks"]:
+                for r in ats["risk_checks"]:
+                    st.markdown(
+                        f"""
+                        <div style="background: #1E293B; border-left: 3px solid #EF4444; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 0.85rem;">
+                            <strong>{r['title']}</strong><br>
+                            <span style="color: #FCA5A5;">{r['description']}</span><br>
+                            <em>Fix: {r.get('recommendation', '')}</em>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.success("Zero critical ATS extraction risks identified!")
+
+
+# =============================================================================
+# PAGE 4: JOB DESCRIPTION MATCH
+# =============================================================================
+elif selected_page == "📋 Job Description Match":
+    st.markdown("## 📋 Job Description Match & Requirements Engine")
+    st.caption("Compares candidate qualifications against required and preferred job posting specifications.")
+
+    if "job_match_analysis" not in st.session_state:
+        st.warning("Please upload a resume first.")
+    else:
+        jm = st.session_state["job_match_analysis"]
+
+        if not jm.get("has_job_description"):
+            st.info("No job description has been provided for this evaluation. Paste a job description below:")
+            jd_input = st.text_area("Target Job Description", height=240, placeholder="Paste requirements, responsibilities, and required qualifications...")
+            jt_input = st.text_input("Target Job Title", placeholder="e.g. Senior Python Backend Engineer")
+            if st.button("Evaluate Job Match", type="primary"):
+                run_full_analysis(
+                    st.session_state["raw_resume_text"],
+                    st.session_state["resume_file_name"],
+                    jd_input,
+                    jt_input,
+                )
+                st.rerun()
+        else:
+            col_m1, col_m2 = st.columns([1, 1], gap="medium")
+
+            with col_m1:
+                with st.container(border=True):
+                    st.plotly_chart(
+                        create_score_gauge(jm["job_match_score"], "Job Match Score", THEME_COLORS["success"]),
+                    )
+                    st.markdown(f"**Fit Level:** `{jm['fit_level']}`")
+                    st.markdown(f"*{jm['summary']}*")
+                    st.caption(jm["disclaimer"])
+
+            with col_m2:
+                with st.container(border=True):
+                    st.markdown("#### Requirements Alignment")
+                    req = jm["required_skills"]
+                    pref = jm["preferred_skills"]
+
+                    st.markdown(f"**Required Skills Coverage:** `{req['coverage_pct']}%` ({len(req['matched'])} of {req['total']} met)")
+                    st.markdown(f"**Preferred Skills Coverage:** `{pref['coverage_pct']}%` ({len(pref['matched'])} of {pref['total']} met)")
+                    st.markdown(f"**TF-IDF Vocabulary Alignment:** `{jm['tfidf_score_pct']}%`")
+                    st.markdown(f"**Role Title Alignment:** `{jm['experience_alignment_pct']}%`")
+
+            st.markdown("---")
+
+            # Matched vs Missing Requirements
+            c_req1, c_req2 = st.columns(2)
+
+            with c_req1:
+                st.markdown(f"#### ✅ Matched Required Skills ({len(req['matched'])})")
+                if req["matched"]:
+                    pills = "".join([f"<span class='skill-pill skill-matched'>{s}</span>" for s in req["matched"]])
+                    st.markdown(f"<div class='skill-pill-container'>{pills}</div>", unsafe_allow_html=True)
+                else:
+                    st.caption("No required technical skills matched.")
+
+                if pref["matched"]:
+                    st.markdown(f"#### 🌟 Matched Preferred Skills ({len(pref['matched'])})")
+                    pref_pills = "".join([f"<span class='skill-pill skill-additional'>{s}</span>" for s in pref["matched"]])
+                    st.markdown(f"<div class='skill-pill-container'>{pref_pills}</div>", unsafe_allow_html=True)
+
+            with c_req2:
+                st.markdown(f"#### ❌ Missing Required Skills ({len(req['missing'])})")
+                if req["missing"]:
+                    pills = "".join([f"<span class='skill-pill skill-missing'>{s}</span>" for s in req["missing"]])
+                    st.markdown(f"<div class='skill-pill-container'>{pills}</div>", unsafe_allow_html=True)
+                else:
+                    st.success("All required skills found on your resume!")
+
+                if pref["missing"]:
+                    st.markdown(f"#### ⚪ Missing Preferred Skills ({len(pref['missing'])})")
+                    pref_missing = "".join([f"<span class='skill-pill skill-neutral'>{s}</span>" for s in pref["missing"]])
+                    st.markdown(f"<div class='skill-pill-container'>{pref_missing}</div>", unsafe_allow_html=True)
+
+            # Evidence Mapping
+            st.markdown("---")
+            st.markdown("### 🔍 Verified Evidence Snippets in Resume")
+            st.caption("Shows where matched keywords actually appear in your work history or projects:")
+
+            if jm["evidence_map"]:
+                for skill, snippet in list(jm["evidence_map"].items())[:6]:
+                    st.markdown(f"- **{skill}:** *\"{snippet}\"*")
+            else:
+                st.caption("No evidence snippets mapped.")
+
+            # Keyword Stuffing Warnings
+            if jm.get("keyword_stuffing_warnings"):
+                st.markdown("---")
+                st.warning("⚠️ Keyword Stuffing Alert:")
+                for st_warn in jm["keyword_stuffing_warnings"]:
+                    st.markdown(f"- {st_warn['warning']}")
+
+
+# =============================================================================
+# PAGE 5: SKILLS & KEYWORDS
+# =============================================================================
+elif selected_page == "🛠 Skills & Keywords":
+    st.markdown("## 🛠 Skills & Keywords Taxonomy Analysis")
+    st.caption("Categorization of technical competencies, tools, frameworks, and domain expertise.")
+
+    if "skills_data" not in st.session_state:
+        st.warning("Please upload a resume first.")
+    else:
+        sk_data = st.session_state["skills_data"]
+        detected = st.session_state["detected_skills"]
+
+        st.markdown(f"Total Unique Skills Detected: **{len(detected)}**")
+
+        for cat, skills in sk_data["by_category"].items():
+            st.markdown(f"#### {cat} ({len(skills)})")
+            pills = "".join([f"<span class='skill-pill skill-matched'>{s}</span>" for s in skills])
+            st.markdown(f"<div class='skill-pill-container'>{pills}</div>", unsafe_allow_html=True)
+
+
+# =============================================================================
+# PAGE 6: EXPERIENCE & ACHIEVEMENTS
+# =============================================================================
+elif selected_page == "💼 Experience & Achievements":
+    st.markdown("## 💼 Work Experience & Achievement Audit")
+    st.caption("Audits bullet points for action verbs, quantifiable metrics, and active ownership.")
+
+    if "quality_analysis" not in st.session_state:
+        st.warning("Please upload a resume first.")
+    else:
+        audit = st.session_state["quality_analysis"]["bullet_audit"]
+
+        col_b1, col_b2, col_b3 = st.columns(3)
+        with col_b1:
+            st.metric("Total Experience Bullets", audit["total_bullets"])
+        with col_b2:
+            st.metric("Quantified Metric Bullets", f"{audit['metric_bullets']} ({int(audit['metric_ratio']*100)}%)")
+        with col_b3:
+            st.metric("Action Verb Openings", f"{audit['action_verb_bullets']} ({int(audit['action_verb_ratio']*100)}%)")
+
+        st.markdown("---")
+
+        if audit["weak_examples"]:
+            st.markdown("### ⚠️ Bullets Flagged for Passive Phrasing")
+            st.caption("Replace passive duties with active business outcomes:")
+            for we in audit["weak_examples"]:
+                st.markdown(f"- ❌ *\"{we}\"*")
+                improved = st.session_state["ai_assistant"].improve_bullet_point(we)
+                st.markdown(f"  - ✅ **Recommended:** *\"{improved['improved']}\"*")
+
+        if audit["metric_examples"]:
+            st.markdown("### 🌟 High-Impact Quantified Examples")
+            for me in audit["metric_examples"]:
+                st.markdown(f"- 🟢 *\"{me}\"*")
+
+
+# =============================================================================
+# PAGE 7: AI RESUME ASSISTANT & OPTIMIZER
+# =============================================================================
+elif selected_page == "✍ AI Resume Assistant":
+    st.markdown("## ✍ AI Resume Assistant & Section Optimizer")
+    st.caption("Rewrites weak bullet points, optimizes summaries, and explains score findings.")
+
+    if "structured_resume" not in st.session_state:
+        st.warning("Please upload a resume first.")
+    else:
+        assistant = st.session_state["ai_assistant"]
+        sr = st.session_state["structured_resume"]
+
+        tab_rewrite, tab_bullets, tab_qa = st.tabs(
+            ["📝 Professional Summary Rewriter", "⚡ Bullet Point Enhancer", "💬 Score Explainer Q&A"]
+        )
+
+        with tab_rewrite:
+            st.markdown("#### ATS-Optimized Summary Generator")
+            curr_summary = sr.get("summary", "")
+            target_role = st.session_state.get("target_job_title", "")
+
+            if st.button("Generate Improved Summary", type="primary"):
+                top_skills = list(st.session_state.get("detected_skills", []))
+                res_sum = assistant.rewrite_summary(curr_summary, sr["candidate_name"], top_skills, target_role)
+
+                c_orig, c_imp = st.columns(2)
+                with c_orig:
+                    st.markdown("**Original Summary:**")
+                    st.markdown(f"*{res_sum['original']}*")
+                with c_imp:
+                    st.markdown("**AI-Improved Summary:**")
+                    st.markdown(f"*{res_sum['improved']}*")
+                    st.caption(f"Rationale: {res_sum['rationale']}")
+
+        with tab_bullets:
+            st.markdown("#### Transform Bullet with Google XYZ Formula")
+            user_bullet = st.text_input("Enter a bullet point to improve:", value="Worked on backend features and fixed bugs.")
+            if st.button("Enhance Bullet Point", type="primary"):
+                imp = assistant.improve_bullet_point(user_bullet)
+                st.markdown(
+                    f"""
+                    <div class="comparison-box">
+                        <div class="comparison-label">Original:</div>
+                        <div class="comparison-original">{imp['original']}</div>
+                        <div style="height: 10px;"></div>
+                        <div class="comparison-label">Improved:</div>
+                        <div class="comparison-improved">{imp['improved']}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if imp.get("metric_note"):
+                    st.warning(imp["metric_note"])
+
+        with tab_qa:
+            st.markdown("#### Ask Questions About Your Evaluation")
+            user_q = st.text_input("Ask a question about your scores, skill gaps, or ATS readiness:", placeholder="Why is my ATS score 75%?")
+            if st.button("Ask Assistant", type="secondary"):
+                if user_q:
+                    q_score = st.session_state["quality_analysis"]["quality_score"]
+                    a_score = st.session_state["ats_analysis"]["ats_score"]
+                    j_score = st.session_state.get("job_match_analysis", {}).get("job_match_score", 0.0)
+                    missing_skills = st.session_state.get("job_match_analysis", {}).get("required_skills", {}).get("missing", [])
+                    ans = assistant.answer_analysis_question(user_q, q_score, a_score, j_score, missing_skills)
+                    st.markdown(f"**Answer:**\n\n{ans}")
+
+
+# =============================================================================
+# PAGE 8: RESUME BUILDER & EXPORT
+# =============================================================================
+elif selected_page == "🏗 Resume Builder & Export":
+    st.markdown("## 🏗 ATS-Friendly Resume Builder & Multi-Format Export")
+    st.caption("Generate clean single-column resumes in vector PDF and Word DOCX formats with built-in text extractability verification.")
+
+    if "structured_resume" not in st.session_state:
+        st.warning("Please upload a resume first.")
+    else:
+        sr = st.session_state["structured_resume"]
+
+        c_prev, c_exp = st.columns([1.4, 1], gap="medium")
+
+        with c_prev:
+            with st.container(border=True):
+                st.markdown("### Document Preview")
+                st.markdown(f"### {sr.get('candidate_name', 'Candidate Name').upper()}")
+                contact = sr.get("contact", {})
+                st.caption(f"{contact.get('email', '')} | {contact.get('phone', '')} | {contact.get('location', '')}")
+
+                if sr.get("summary"):
+                    st.markdown("**PROFESSIONAL SUMMARY**")
+                    st.markdown(sr["summary"])
+
+                if sr.get("experience"):
+                    st.markdown("**WORK EXPERIENCE**")
+                    for role in sr["experience"]:
+                        st.markdown(f"**{role.get('title', '')}** | *{role.get('company', '')}* ({role.get('dates', '')})")
+                        for b in role.get("bullets", []):
+                            st.markdown(f"- {b}")
+
+        with c_exp:
+            with st.container(border=True):
+                st.markdown("### 📥 Export Documents")
+
+                # 1. Export DOCX
+                docx_bytes = generate_docx_resume(sr)
+                st.download_button(
+                    label="📄 Download ATS-Standard DOCX (.docx)",
+                    data=docx_bytes.getvalue(),
+                    file_name=f"{sr.get('candidate_name', 'Resume').replace(' ', '_')}_ATS_Optimized.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    type="primary",
+                )
+
+                # 2. Export PDF
+                pdf_bytes = generate_pdf_resume(sr)
+                st.download_button(
+                    label="📑 Download Clean Vector PDF (.pdf)",
+                    data=pdf_bytes.getvalue(),
+                    file_name=f"{sr.get('candidate_name', 'Resume').replace(' ', '_')}_ATS_Optimized.pdf",
+                    mime="application/pdf",
+                    type="primary",
+                )
+
+                # 3. Export Comprehensive Analysis Report
+                report_md = generate_analysis_report(
+                    resume_name=sr.get("file_name", "Resume.pdf"),
+                    job_title=st.session_state.get("target_job_title", ""),
+                    quality_analysis=st.session_state["quality_analysis"],
+                    ats_analysis=st.session_state["ats_analysis"],
+                    job_match=st.session_state["job_match_analysis"],
+                )
+                st.download_button(
+                    label="📊 Download Evaluation Report (.md)",
+                    data=report_md.encode("utf-8"),
+                    file_name="ResumeIQ_Evaluation_Report.md",
+                    mime="text/markdown",
+                    type="secondary",
+                )
+
+                st.markdown("---")
+                st.markdown("#### 🔬 Self-Test Extractability Check")
+                st.caption("Re-parses the generated PDF file to verify zero data loss for ATS systems:")
+
+                if st.button("Verify PDF Extractability", type="secondary"):
+                    is_ok, msg = verify_generated_resume_extractability(pdf_bytes.getvalue(), "generated.pdf")
+                    if is_ok:
+                        st.success(f"✓ {msg}")
+                    else:
+                        st.error(msg)
+
+
+# =============================================================================
+# PAGE 9: HISTORY & VERSION COMPARISONS
+# =============================================================================
+elif selected_page == "🕒 History & Comparisons":
+    st.markdown("## 🕒 Analysis History & Version Comparison")
+    st.caption("Track score progression across revisions and compare Version A against Version B.")
+
+    # Save current run if available
+    if "quality_analysis" in st.session_state:
+        with st.expander("💾 Save Current Analysis Snapshot to History", expanded=False):
+            col_sv1, col_sv2 = st.columns([3, 1])
+            with col_sv1:
+                v_label = st.text_input("Version Tag", value="v2.0 Revision", placeholder="e.g. Added Docker, v2.1")
+                v_notes = st.text_input("Revision Notes", placeholder="e.g. Optimized metrics in experience bullets")
+            with col_sv2:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                if st.button("Save Snapshot", type="primary"):
+                    qa = st.session_state["quality_analysis"]
+                    aa = st.session_state["ats_analysis"]
+                    ja = st.session_state["job_match_analysis"]
+
+                    save_analysis(
+                        resume_name=st.session_state["resume_file_name"],
+                        job_title=st.session_state.get("target_job_title", ""),
+                        overall_score=qa["quality_score"],
+                        tfidf_score=ja.get("tfidf_score_pct", 0.0),
+                        skill_score=ja.get("required_skills", {}).get("coverage_pct", 0.0),
+                        matched_skills=ja.get("required_skills", {}).get("matched", []),
+                        missing_skills=ja.get("required_skills", {}).get("missing", []),
+                        notes=v_notes,
+                        quality_score=qa["quality_score"],
+                        ats_score=aa["ats_score"],
+                        job_match_score=ja.get("job_match_score", 0.0),
+                        quality_breakdown=qa["breakdown"],
+                        ats_breakdown=aa["breakdown"],
+                        job_match_breakdown=ja.get("required_skills", {}),
+                        version_label=v_label,
+                        db_path=DB_PATH,
+                    )
+                    st.success("Snapshot recorded!")
+                    st.rerun()
+
+    records = get_all_analyses(DB_PATH)
+
+    if not records:
+        st.info("No saved records found. Run an analysis and save a snapshot to start tracking history.")
+    else:
+        # Comparison Selector
+        if len(records) >= 2:
+            st.markdown("### 🔀 Version Diff & Comparison")
+            c_sel1, c_sel2, c_btn = st.columns([2, 2, 1])
+            record_options = {r["id"]: f"#{r['id']}: {r['resume_name']} ({r.get('version_label', 'v1.0')}) - {r['timestamp']}" for r in records}
+
+            with c_sel1:
+                id_a = st.selectbox("Baseline (Version A)", options=list(record_options.keys()), index=1, format_func=lambda x: record_options[x])
+            with c_sel2:
+                id_b = st.selectbox("Updated (Version B)", options=list(record_options.keys()), index=0, format_func=lambda x: record_options[x])
+            with c_btn:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                do_compare = st.button("Compare Versions", type="primary")
+
+            if do_compare or "diff_result" in st.session_state:
+                diff = compare_analysis_records(id_a, id_b, DB_PATH)
+                if diff:
+                    st.markdown("#### Score Deltas (Version B vs Version A)")
+                    d_c1, d_c2, d_c3 = st.columns(3)
+                    with d_c1:
+                        st.metric("Quality Delta", f"{diff['record_b'].get('quality_score', 0)}%", f"{diff['quality_score_delta']:+0.1f}%")
+                    with d_c2:
+                        st.metric("ATS Compatibility Delta", f"{diff['record_b'].get('ats_score', 0)}%", f"{diff['ats_score_delta']:+0.1f}%")
+                    with d_c3:
+                        st.metric("Job Match Delta", f"{diff['record_b'].get('job_match_score', 0)}%", f"{diff['job_match_delta']:+0.1f}%")
+
+                    if diff["newly_added_skills"]:
+                        st.markdown(f"**Newly Added Skills:** `{', '.join(diff['newly_added_skills'])}`")
+                    if diff["removed_skills"]:
+                        st.markdown(f"**Removed Skills:** `{', '.join(diff['removed_skills'])}`")
+
+        st.markdown("---")
+        st.markdown("### 📋 All Saved Historical Records")
+
+        col_act1, col_act2 = st.columns([4, 1])
+        with col_act2:
+            if st.button("🗑 Wipe All Records", type="secondary"):
+                clear_all_analyses(DB_PATH)
+                st.rerun()
+
+        for rec in records:
+            with st.expander(f"Record #{rec['id']}: {rec['resume_name']} [{rec.get('version_label', 'v1.0')}] — Quality: {rec.get('quality_score', rec['overall_score'])}% | ATS: {rec.get('ats_score', 85)}% ({rec['timestamp']})"):
+                c1, c2, c3 = st.columns([2, 2, 1])
+                with c1:
+                    st.markdown(f"**Target Role:** {rec['job_title']}")
+                    st.markdown(f"**Notes:** {rec['notes'] or 'None'}")
+                with c2:
+                    st.markdown(f"**Quality Score:** {rec.get('quality_score', rec['overall_score'])}%")
+                    st.markdown(f"**ATS Compatibility:** {rec.get('ats_score', 85)}%")
+                    st.markdown(f"**Job Match:** {rec.get('job_match_score', 0)}%")
+                with c3:
+                    if st.button("Delete", key=f"del_rec_{rec['id']}", type="secondary"):
                         delete_analysis(rec["id"], DB_PATH)
                         st.success(f"Record #{rec['id']} deleted.")
                         st.rerun()
 
-                st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
-                # Show skills breakdown
-                matched = rec["matched_skills"]
-                missing = rec["missing_skills"]
+# =============================================================================
+# PAGE 10: SETTINGS & API CONFIGURATION
+# =============================================================================
+elif selected_page == "⚙ Settings & API":
+    st.markdown("## ⚙ Settings & API Configuration")
+    st.caption("Configure AI providers, inspect local data storage, and review privacy policies.")
 
-                c_m1, c_m2 = st.columns(2)
-                with c_m1:
-                    st.markdown(f"**Matched Skills ({len(matched)}):**")
-                    if matched:
-                        pills = "".join([f"<span class='skill-pill skill-matched'>{s}</span>" for s in matched])
-                        st.markdown(f"<div class='skill-pill-container'>{pills}</div>", unsafe_allow_html=True)
-                    else:
-                        st.caption("None recorded.")
+    with st.container(border=True):
+        st.markdown("### 🤖 AI Provider Configuration")
+        provider_choice = st.selectbox(
+            "Select Active AI Engine",
+            ["local (Built-in Rule-Based / Zero-Key)", "gemini (Google Gemini API)", "openai (OpenAI API)"],
+            index=0,
+        )
 
-                with c_m2:
-                    st.markdown(f"**Missing Skills ({len(missing)}):**")
-                    if missing:
-                        pills = "".join([f"<span class='skill-pill skill-missing'>{s}</span>" for s in missing])
-                        st.markdown(f"<div class='skill-pill-container'>{pills}</div>", unsafe_allow_html=True)
-                    else:
-                        st.caption("None missing.")
+        if "gemini" in provider_choice:
+            gemini_key = st.text_input("Google Gemini API Key", type="password", value=AI_CONFIG["gemini_api_key"])
+            if st.button("Save Gemini Key", type="primary"):
+                os.environ["GEMINI_API_KEY"] = gemini_key
+                AI_CONFIG["gemini_api_key"] = gemini_key
+                AI_CONFIG["default_provider"] = "gemini"
+                st.session_state.ai_assistant = ResumeAssistant(provider="gemini", api_key=gemini_key)
+                st.success("Gemini API key configured!")
+        elif "openai" in provider_choice:
+            openai_key = st.text_input("OpenAI API Key", type="password", value=AI_CONFIG["openai_api_key"])
+            if st.button("Save OpenAI Key", type="primary"):
+                os.environ["OPENAI_API_KEY"] = openai_key
+                AI_CONFIG["openai_api_key"] = openai_key
+                AI_CONFIG["default_provider"] = "openai"
+                st.session_state.ai_assistant = ResumeAssistant(provider="openai", api_key=openai_key)
+                st.success("OpenAI API key configured!")
+        else:
+            st.info("Using built-in deterministic local engine. No external API keys or cloud calls required.")
 
-
-# -----------------------------------------------------------------------------
-# Page 3: Skill Taxonomy Explorer
-# -----------------------------------------------------------------------------
-elif menu_choice == "📚 Skill Taxonomy":
-    st.markdown("## 📚 Skill Taxonomy Explorer")
-    st.caption("Explore, search, and customize the skills dictionary used for keyword and gap detection.")
-
-    extractor = st.session_state.skill_extractor
-    categories = list(extractor.taxonomy.keys())
-
-    # Add custom skill form
-    with st.expander("➕ Add Custom Skill to Taxonomy", expanded=False):
-        c_add1, c_add2, c_add3 = st.columns([2, 2, 1])
-        with c_add1:
-            new_skill = st.text_input("Skill Name", placeholder="e.g. Julia, Rust, Solana")
-        with c_add2:
-            target_category = st.selectbox("Category", categories + ["Custom Skills"])
-        with c_add3:
-            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            if st.button("Add Skill", type="primary"):
-                if new_skill:
-                    success = extractor.add_custom_skill(new_skill, target_category)
-                    if success:
-                        st.success(f"Added '{new_skill}' to '{target_category}'!")
-                    else:
-                        st.info(f"'{new_skill}' already exists in the taxonomy.")
-                else:
-                    st.warning("Please specify a valid skill name.")
-
-    # Search filter
-    search_query = st.text_input("🔍 Search skills", placeholder="Type to filter skills...").strip().lower()
-
-    col1, col2 = st.columns(2)
-    for idx, (cat, skills) in enumerate(extractor.taxonomy.items()):
-        filtered_skills = [s for s in skills if search_query in s.lower()] if search_query else skills
-        target_col = col1 if idx % 2 == 0 else col2
-
-        with target_col:
-            with st.container():
-                st.markdown(f"#### {cat} ({len(filtered_skills)})")
-                if filtered_skills:
-                    pills = "".join([f"<span class='skill-pill skill-neutral'>{s}</span>" for s in filtered_skills])
-                    st.markdown(f"<div class='skill-pill-container'>{pills}</div>", unsafe_allow_html=True)
-                else:
-                    st.caption("No matching skills found in this category.")
-
-
-# -----------------------------------------------------------------------------
-# Page 4: How It Works & Architecture Guide
-# -----------------------------------------------------------------------------
-elif menu_choice == "📖 How It Works":
-    st.markdown("## 📖 Architecture & Educational Guide")
-    st.caption("Understand the algorithms, pipelines, and design principles powering ResumeIQ.")
-
-    st.markdown(
-        """
-        ### 🔄 End-to-End Execution Flow
-        ```
-        [ Resume File (PDF / DOCX / TXT) ]           [ Target Job Description ]
-                      │                                          │
-                      ▼                                          ▼
-        [ Document Extractor (fitz / docx) ]        [ Input Sanitization & Validation ]
-                      │                                          │
-                      ▼                                          ▼
-        [ Section & Contact Parsing ]               [ Skill Extractor (Regex Taxonomy) ]
-                      │                                          │
-                      ├──────────────────────────┬───────────────┤
-                      │                          │               │
-                      ▼                          ▼               ▼
-           [ Skill Gap Analysis ]     [ TF-IDF Vectorizer ]  [ Rule-Based Recommendations ]
-          (Matched, Missing, Extra)   (Cosine Similarity)   (Metrics, Phrasing, Sections)
-                      │                          │                       │
-                      └──────────────┬───────────┘                       │
-                                     ▼                                   │
-                       [ Weighted Compatibility Model ]                  │
-                                     │                                   │
-                                     └─────────────────┬─────────────────┘
-                                                       ▼
-                                         [ Modern Streamlit Dashboard ]
-                                                       │
-                                                       ▼
-                                          [ SQLite Local History ]
-        ```
-
-        ---
-
-        ### 🧠 Key Educational Concepts
-
-        #### 1. How PDF Text Extraction Works
-        - Standard digital PDFs contain vector text glyphs positioned with coordinates.
-        - **PyMuPDF (`fitz`)** accesses the PDF's internal document tree and extracts character streams without rendering them into raster images.
-        - If a PDF is a scanned photo, it contains zero text streams. ResumeIQ detects this by calculating the character-per-page ratio and warns the user that OCR is needed instead of silently failing.
-
-        #### 2. How TF-IDF Vectorization Works
-        - **TF (Term Frequency):** Measures how frequently a word appears in a document.
-          $$\text{TF}(t, d) = \frac{\text{Count of word } t \text{ in document } d}{\text{Total words in document } d}$$
-        - **IDF (Inverse Document Frequency):** Measures how rare or informative a word is across all documents.
-          $$\text{IDF}(t) = \log\left(\frac{1 + N}{1 + \text{DF}(t)}\right) + 1$$
-        - Rare technical words like `Kubernetes` or `FastAPI` receive higher TF-IDF weights, while common English words receive negligible weights.
-
-        #### 3. How Cosine Similarity Works
-        - Text documents are represented as high-dimensional TF-IDF vectors $\vec{A}$ and $\vec{B}$.
-        - Cosine similarity calculates the cosine of the angle $\theta$ between the two vectors:
-          $$\text{Cosine Similarity} = \frac{\vec{A} \cdot \vec{B}}{\|\vec{A}\| \|\vec{B}\|}$$
-        - Returns a value from $0.0$ (no shared vocabulary) to $1.0$ (identical vocabulary proportions).
-
-        #### 4. Explainable Hybrid Scoring
-        Instead of treating an unexplainable number as an "AI Score", ResumeIQ explicitly divides the score into:
-        1. **Skill Coverage (60% weight):** Did the candidate demonstrate the concrete hard skills required by the job?
-        2. **TF-IDF Semantic Similarity (40% weight):** Does the overall vocabulary, experience descriptions, and terminology align with the job description?
-
-        ---
-
-        ### 🛡 Privacy Guarantee
-        - **No Cloud Transmission:** No external LLM or cloud API is queried. All algorithms execute directly inside your Python interpreter.
-        - **Safe Storage:** SQLite only stores high-level scores and extracted skill lists. Raw resume text is never permanently saved to disk.
-        """
-    )
+    with st.container(border=True):
+        st.markdown("### 🔒 Privacy & Data Retention")
+        st.markdown(
+            f"""
+            - **Local Database Path:** `{DB_PATH}`
+            - **Raw Resume Text Retention:** Never saved permanently to disk.
+            - **Encrypted Transmission:** Zero network traffic sent during local mode.
+            """
+        )
+        if st.button("Reset Local Database"):
+            clear_all_analyses(DB_PATH)
+            st.success("Database reset to clean state.")
